@@ -3,6 +3,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using ZdrowieInfo.Server.Common;
 using ZdrowieInfo.Server.Data;
+using ZdrowieInfo.Server.Export;
 
 namespace ZdrowieInfo.Server.Reports;
 
@@ -31,13 +32,40 @@ public sealed class DailyReportService(
     IReportGenerator generator,
     ReportSettings settings,
     TimeProvider time,
+    ReportExporter exporter,
+    IOptions<ExportOptions> exportOptions,
     ILogger<DailyReportService> logger)
 {
+    /// <summary>
+    /// Dokument .tex i PDF po zapisaniu raportu. Błąd eksportu nie wpływa na raport ani powiadomienie – trafia do logu
+    /// i pola PdfError, a PDF można wygenerować ponownie przy pobraniu.
+    /// </summary>
+    private async Task ExportQuietlyAsync(DateOnly date)
+    {
+        if (!exportOptions.Value.Enabled) return;
+        try
+        {
+            var result = await exporter.ExportAsync(date);
+            if (!result.Success) logger.LogWarning("Raport {Date}: PDF niewygenerowany – {Error}", date, result.Error);
+        }
+        catch (Exception e)
+        {
+            logger.LogError(e, "Raport {Date}: eksport PDF przerwany.", date);
+        }
+    }
+
     private readonly SemaphoreSlim _lock = new(1, 1);
 
     /// <param name="replace">Zastępuje istniejący raport (wpisy z niego wracają do wejścia).</param>
     /// <param name="finalAttempt">Przy błędzie przejściowym nie czekać – od razu raport awaryjny.</param>
     public async Task<ReportRunResult> GenerateAsync(DateOnly date, bool replace = false, bool finalAttempt = true, CancellationToken ct = default)
+    {
+        var result = await GenerateCoreAsync(date, replace, finalAttempt, ct);
+        if (result.Outcome == ReportRunOutcome.Created) await ExportQuietlyAsync(date);
+        return result;
+    }
+
+    private async Task<ReportRunResult> GenerateCoreAsync(DateOnly date, bool replace, bool finalAttempt, CancellationToken ct)
     {
         await _lock.WaitAsync(ct);
         try
@@ -131,6 +159,13 @@ public sealed class DailyReportService(
     /// Za zaraportowane uznawane są tylko wpisy użyte w cytatach albo na liście pominiętych.
     /// </summary>
     public async Task<ExternalReportResult> SaveExternalAsync(DateOnly date, ReportDocument document, string producer, bool replace, CancellationToken ct = default)
+    {
+        var result = await SaveExternalCoreAsync(date, document, producer, replace, ct);
+        if (result.Outcome == ExternalReportOutcome.Created) await ExportQuietlyAsync(date);
+        return result;
+    }
+
+    private async Task<ExternalReportResult> SaveExternalCoreAsync(DateOnly date, ReportDocument document, string producer, bool replace, CancellationToken ct)
     {
         await _lock.WaitAsync(ct);
         try

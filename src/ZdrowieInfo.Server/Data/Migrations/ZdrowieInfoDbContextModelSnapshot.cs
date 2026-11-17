@@ -475,6 +475,10 @@ namespace ZdrowieInfo.Server.Data.Migrations
                         .HasColumnType("character varying(100)")
                         .HasColumnName("model");
 
+                    b.Property<string>("PdfError")
+                        .HasColumnType("text")
+                        .HasColumnName("pdf_error");
+
                     b.Property<string>("PdfPath")
                         .HasColumnType("text")
                         .HasColumnName("pdf_path");

@@ -57,6 +57,9 @@ public sealed class Report
     /// <summary>Etap 5: pliki .tex/.pdf. Etap 4: czy wysłano push.</summary>
     public string? TexPath { get; set; }
     public string? PdfPath { get; set; }
+
+    /// <summary>Błąd ostatniej kompilacji PDF (raport HTML jest dostępny niezależnie).</summary>
+    public string? PdfError { get; set; }
     public bool PushSent { get; set; }
 
     public DateTimeOffset CreatedAt { get; set; }

@@ -20,7 +20,7 @@ public sealed class ApiKeyAuthenticationHandler(
     ApiKeyService keys)
     : AuthenticationHandler<AuthenticationSchemeOptions>(options, logger, encoder)
 {
-    public const string Scheme = "ApiKey";
+    public const string SchemeName = "ApiKey";
     public const string ScopeClaim = "scope";
 
     protected override async Task<AuthenticateResult> HandleAuthenticateAsync()
@@ -33,7 +33,7 @@ public sealed class ApiKeyAuthenticationHandler(
 
         var claims = new List<Claim> { new(ClaimTypes.NameIdentifier, key.Id.ToString()), new(ClaimTypes.Name, key.Name) };
         claims.AddRange(key.Scopes.Select(s => new Claim(ScopeClaim, s)));
-        return AuthenticateResult.Success(new AuthenticationTicket(new ClaimsPrincipal(new ClaimsIdentity(claims, Scheme)), Scheme));
+        return AuthenticateResult.Success(new AuthenticationTicket(new ClaimsPrincipal(new ClaimsIdentity(claims, SchemeName)), SchemeName));
     }
 
     protected override Task HandleChallengeAsync(AuthenticationProperties properties)
@@ -52,12 +52,12 @@ public static class ApiKeysServiceCollectionExtensions
     public static IServiceCollection AddApiKeys(this IServiceCollection services)
     {
         services.AddSingleton<ApiKeyService>();
-        services.AddAuthentication().AddScheme<AuthenticationSchemeOptions, ApiKeyAuthenticationHandler>(ApiKeyAuthenticationHandler.Scheme, null);
+        services.AddAuthentication().AddScheme<AuthenticationSchemeOptions, ApiKeyAuthenticationHandler>(ApiKeyAuthenticationHandler.SchemeName, null);
         services.AddAuthorization(o =>
         {
             foreach (var scope in ApiScopes.All)
                 o.AddPolicy(scope, p => p
-                    .AddAuthenticationSchemes(ApiKeyAuthenticationHandler.Scheme)
+                    .AddAuthenticationSchemes(ApiKeyAuthenticationHandler.SchemeName)
                     .RequireAuthenticatedUser()
                     .RequireClaim(ApiKeyAuthenticationHandler.ScopeClaim, scope));
         });

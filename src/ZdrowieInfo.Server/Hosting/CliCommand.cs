@@ -1,6 +1,6 @@
 namespace ZdrowieInfo.Server.Hosting;
 
-internal enum CliCommandKind { Run, MigrateOnly, CreateUser, SetPassword, ResetMfa, CheckSources, CheckNow, ApplyDefaultSources, GenerateReport, MarkReportedBefore, Invalid }
+internal enum CliCommandKind { Run, MigrateOnly, CreateUser, SetPassword, ResetMfa, CheckSources, CheckNow, ApplyDefaultSources, GenerateReport, MarkReportedBefore, ExportReport, Invalid }
 
 internal sealed record CliCommand(CliCommandKind Kind, string? Login = null, string? Error = null, bool Replace = false)
 {
@@ -15,6 +15,7 @@ internal sealed record CliCommand(CliCommandKind Kind, string? Login = null, str
           ZdrowieInfo.Server --check-now [slug]      sprawdza źródła teraz i zapisuje wynik (jak harmonogram)
           ZdrowieInfo.Server --apply-default-sources [slug]  przywraca adresy i selektory z listy domyślnej (nowy stan bazowy)
           ZdrowieInfo.Server --generate-report [rrrr-mm-dd] [--replace]  przygotowuje raport dnia (domyślnie dziś)
+          ZdrowieInfo.Server --export-report [rrrr-mm-dd]  generuje .tex i PDF raportu (domyślnie dziś)
           ZdrowieInfo.Server --mark-reported-before rrrr-mm-dd  oznacza wcześniejsze wpisy jako zaraportowane (start raportów)
         """;
 
@@ -51,6 +52,11 @@ internal sealed record CliCommand(CliCommandKind Kind, string? Login = null, str
             {
                 var date = i + 1 < args.Length && !args[i + 1].StartsWith("--", StringComparison.Ordinal) ? args[++i] : null;
                 current = new CliCommand(CliCommandKind.GenerateReport, date, Replace: args.Contains("--replace"));
+            }
+            else if (args[i] == "--export-report")
+            {
+                var date = i + 1 < args.Length && !args[i + 1].StartsWith("--", StringComparison.Ordinal) ? args[++i] : null;
+                current = new CliCommand(CliCommandKind.ExportReport, date);
             }
             else if (args[i] == "--mark-reported-before")
             {

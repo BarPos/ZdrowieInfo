@@ -6,6 +6,7 @@ using ZdrowieInfo.Server.Accounts;
 using ZdrowieInfo.Server.ApiKeys;
 using ZdrowieInfo.Server.Common;
 using ZdrowieInfo.Server.Data;
+using ZdrowieInfo.Server.Export;
 using ZdrowieInfo.Server.Hosting;
 using ZdrowieInfo.Server.Pwa;
 using ZdrowieInfo.Server.Reports;
@@ -43,6 +44,7 @@ builder.Services.AddAuthorization();
 builder.Services.AddSources(builder.Configuration);
 builder.Services.AddReports(builder.Configuration);
 builder.Services.AddApiKeys();
+builder.Services.AddReportExport(builder.Configuration);
 builder.Services.AddZdrowieInfoWeb();
 builder.Services.AddHealthChecks();
 
@@ -85,6 +87,7 @@ app.MapServiceWorker();
 app.MapHealthChecks("/healthz").AllowAnonymous();
 app.MapZdrowieInfoWeb();
 app.MapReportsApi();
+app.MapReportFiles();
 
 app.Logger.LogInformation("ZdrowieInfo {Version} pod adresem {PublicUrl}", AppVersion.Current, app.Services.GetRequiredService<IOptions<ZdrowieInfoOptions>>().Value.PublicUrl);
 await app.RunAsync();

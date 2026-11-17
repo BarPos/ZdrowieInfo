@@ -88,6 +88,7 @@ cd /opt/zdrowieinfo && sudo -u zdrowieinfo env $(sudo grep -v '^#' /etc/zdrowiei
 | `--check-sources [slug]` | próba selektorów na żywych stronach, bez zapisu |
 | `--check-now [slug]` | sprawdza źródła teraz i zapisuje wynik (jak harmonogram) |
 | `--generate-report [rrrr-mm-dd] [--replace]` | przygotowuje raport dnia teraz (domyślnie dziś) |
+| `--export-report [rrrr-mm-dd]` | generuje .tex i PDF raportu (domyślnie dziś) |
 | `--mark-reported-before rrrr-mm-dd` | przy włączaniu raportów: starsze wpisy nie trafią do pierwszego raportu |
 | `--apply-default-sources [slug]` | przywraca adresy i selektory z listy domyślnej (np. po aktualizacji aplikacji); zmienione źródła dostają nowy stan bazowy |
 
@@ -106,6 +107,8 @@ curl -H "Authorization: Bearer mon_…" https://zdrowieinfo.example.pl/api/items
 ```bash
 curl -X POST -H "Authorization: Bearer mon_…" -H "Content-Type: application/json" --data @raport.json "https://zdrowieinfo.example.pl/api/reports?date=2026-11-18"
 ```
+
+Każdy raport ma też wersję PDF (XeLaTeX z szablonu; przycisk „Pobierz PDF” na stronie raportu, adres `/eksport/raport-rrrr-mm-dd.pdf`). Lokalnie potrzebny TeX Live (`xelatex`, `latexmk`); na serwerze instaluje go `install.sh`.
 
 Format raportu (`title`, `summary`, `findings[]` z `importance`, `category`, `headline`, `body`, `action`, `citations[]` z `item_id` i `quote`, `ignored[]`) — [docs/decyzje.md](docs/decyzje.md), D16–D19.
 

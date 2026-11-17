@@ -1,0 +1,131 @@
+%% ZdrowieInfo – raport dzienny. Szablon Scriban → XeLaTeX (latexmk -xelatex albo Tectonic).
+%% Każdy tekst z raportu przechodzi przez | latex (akapity) albo | latex_line (jedna linia), adresy przez | latex_url. Bez shell-escape.
+\documentclass[11pt,a4paper]{article}
+\usepackage{fontspec}
+\usepackage[polish]{babel}
+% Czcionki po nazwie pliku (kpathsea) – działa w TeX Live i Tectonic bez rejestracji w systemie.
+\setmainfont{texgyrepagella}[Extension=.otf,UprightFont=*-regular,BoldFont=*-bold,ItalicFont=*-italic,BoldItalicFont=*-bolditalic]
+\setsansfont{texgyreheros}[Extension=.otf,UprightFont=*-regular,BoldFont=*-bold,ItalicFont=*-italic,BoldItalicFont=*-bolditalic,Scale=MatchLowercase]
+\usepackage[a4paper,margin=2.3cm,top=2.6cm,bottom=2.6cm,headsep=0.8cm]{geometry}
+\usepackage{xcolor}
+\usepackage{microtype}
+\usepackage{enumitem}
+\usepackage{titlesec}
+\usepackage{fancyhdr}
+\usepackage[hang,flushmargin]{footmisc}
+\usepackage{hyperref}
+
+\definecolor{accent}{HTML}{0F5C4D}
+\definecolor{muted}{HTML}{5D6B66}
+\definecolor{critical}{HTML}{A4262C}
+\definecolor{high}{HTML}{9A6200}
+\definecolor{notebg}{HTML}{FFF4CE}
+\definecolor{actionbg}{HTML}{E6F4EA}
+
+\hypersetup{colorlinks=true,linkcolor=accent,urlcolor=accent,
+  pdftitle={ {{ title | latex_line }} },pdfauthor={ZdrowieInfo},pdflang={pl-PL}}
+\urlstyle{same}
+
+\titleformat{\section}{\large\sffamily\bfseries\color{accent}}{\thesection.}{0.6em}{}
+\titlespacing*{\section}{0pt}{1.6em}{0.6em}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{0.45em}
+\setlist{itemsep=0.2em,topsep=0.3em}
+\renewcommand{\footnotelayout}{\small\raggedright}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\small\sffamily\color{muted}ZdrowieInfo · raport dzienny}
+\fancyhead[R]{\small\sffamily\color{muted} {{ date_short }} }
+\fancyfoot[C]{\small\sffamily\color{muted}\thepage}
+\renewcommand{\headrulewidth}{0.4pt}
+
+\newcommand{\notebox}[2]{\par\noindent\colorbox{#1}{\parbox{\dimexpr\linewidth-2\fboxsep}{#2}}\par}
+
+\begin{document}
+
+{\small\sffamily\color{muted} ZDROWIEINFO · RAPORT DZIENNY}\par\vspace{0.2em}
+{\LARGE\bfseries {{ title | latex_line }} \par}
+\vspace{0.3em}
+{\color{muted} {{ date_long | latex_line }} }\par
+\vspace{0.6em}
+{\small
+\begin{tabular}{@{}l@{\hspace{1.2em}}l@{}}
+Przygotował: & {{ producer | latex_line }} \\
+Punkty: & {{ findings_count }}{{ if critical_count > 0 }} (krytyczne: {{ critical_count }}){{ end }} \\
+Wpisy źródłowe: & {{ entries_count }} \\
+Źródła: & sprawdzone w tym dniu {{ sources_checked }} z {{ sources_total }}{{ if source_problems.size > 0 }}, z uwagami: {{ source_problems.size }}{{ end }} \\
+\end{tabular}}
+\vspace{0.4em}
+{{ if status_note }}
+\notebox{notebg}{\small {{ status_note | latex }} }
+{{ end }}
+
+\section{Podsumowanie}
+{{ summary | latex }}
+
+{{ if groups.size > 0 }}
+\section{Ustalenia}
+{{ for g in groups }}
+\subsection*{\sffamily\small\color{ {{- g.color -}} }\MakeUppercase{ {{ g.heading | latex_line }} }}
+{{ for f in g.findings }}
+\textbf{ {{- f.number }}.~{{ f.headline | latex_line -}} }\hfill{\small\color{muted} {{ f.category | latex_line }} }\par
+{{ f.body | latex }}
+{{ if f.action }}
+\notebox{actionbg}{\small\textbf{Do zrobienia:} {{ f.action | latex -}} }
+{{ end }}
+{{ for c in f.citations }}
+\begin{quote}\itshape „{{ c.quote | latex }}”\footnote{ {{- c.title | latex_line }}{{ if c.date }}, {{ c.date }}{{ end }}{{ if !c.verified }} (cytat niezweryfikowany){{ end }}.{{ if c.url != "" }} \url{ {{- c.url | latex_url -}} }{{ end }} }\end{quote}
+{{ end }}
+\vspace{0.6em}
+{{ end }}
+{{ end }}
+{{ end }}
+
+{{ if is_ai_error && entries.size > 0 }}
+\section{Wykryte wpisy (bez analizy)}
+\begin{enumerate}[leftmargin=1.6em]
+{{ for e in entries }}
+\item {{ e.title | latex_line }} {\small\color{muted}({{ e.source | latex_line }}{{ if e.date }}, {{ e.date }}{{ end }})}\\\url{ {{- e.url | latex_url -}} }
+{{ end }}
+\end{enumerate}
+{{ end }}
+
+{{ if ignored.size > 0 }}
+\section{Pominięte wpisy}
+{\small Wpisy uznane za nieistotne dla przychodni – z powodem, żeby można było sprawdzić, czy nic ważnego nie zostało odrzucone.}
+\begin{itemize}[leftmargin=1.2em]
+{{ for i in ignored }}
+\item {{ i.title | latex_line }} {\color{muted}– {{ i.reason | latex }} }
+{{ end }}
+\end{itemize}
+{{ end }}
+
+\section{Stan źródeł}
+{{ if source_problems.size == 0 }}
+Wszystkie {{ sources_total }} źródeł bez problemów (sprawdzone w tym dniu: {{ sources_checked }}; pozostałe według swojej częstotliwości).
+{{ else }}
+Bez problemów: {{ sources_total - source_problems.size }} z {{ sources_total }}. Uwagi:
+\begin{itemize}[leftmargin=1.2em]
+{{ for s in source_problems }}
+\item \textbf{ {{ s.name | latex_line }} }: {{ s.text | latex }}
+{{ end }}
+\end{itemize}
+{{ end }}
+{{ for r in recoveries }}
+{\small\color{muted} {{ r | latex_line }} }\par
+{{ end }}
+
+{{ if !is_ai_error && entries.size > 0 }}
+\section{Wpisy źródłowe}
+\begin{enumerate}[leftmargin=1.6em]\small
+{{ for e in entries }}
+\item {{ e.title | latex_line }} {\color{muted}({{ e.source | latex_line }}{{ if e.date }}, {{ e.date }}{{ end }})}
+{{ end }}
+\end{enumerate}
+{{ end }}
+
+\vfill
+{\footnotesize\color{muted} Wygenerowano {{ generated }} przez ZdrowieInfo z publicznych komunikatów NFZ, CeZ, MZ i CSIRT CeZ. Cytaty są automatycznie porównywane z treścią źródeł.}
+
+\end{document}

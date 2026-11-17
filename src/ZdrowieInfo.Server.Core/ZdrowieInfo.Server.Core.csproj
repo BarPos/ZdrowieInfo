@@ -14,10 +14,12 @@
     <PackageReference Include="AngleSharp" />
     <PackageReference Include="DiffPlex" />
     <PackageReference Include="Anthropic" />
+    <PackageReference Include="Scriban" />
     <PackageReference Include="Microsoft.Extensions.Http.Resilience" />
   </ItemGroup>
   <ItemGroup>
     <EmbeddedResource Include="Sources/DefaultSources.json" LogicalName="ZdrowieInfo.Server.Sources.DefaultSources.json" />
+    <EmbeddedResource Include="Export/report.tex.scriban" LogicalName="ZdrowieInfo.Server.Export.report.tex.scriban" />
   </ItemGroup>
   <ItemGroup>
     <InternalsVisibleTo Include="ZdrowieInfo.Server.Tests" />

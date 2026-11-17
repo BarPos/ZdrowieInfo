@@ -226,3 +226,24 @@ Cytat musi być dosłownym fragmentem tytułu, opisu albo treści wskazanego wpi
 - Klucz `mon_<8 znaków>_<sekret>` (32 losowe bajty, base64url); w bazie prefiks i SHA-256 sekretu, porównanie w czasie stałym; „ostatnie użycie” zapisywane najwyżej raz na minutę. Pełny klucz widać tylko raz (panel → Klucze API).
 - Schemat `ApiKey` (`Authorization: Bearer …`), polityki na zakresy `reports:write` i `mcp:read`, limit 60 zapytań/min na klucz (`/api/*`). Wymuszanie MFA dotyczy tylko sesji z ciasteczka logowania — programy z kluczem nie mają TOTP.
 - `GET /api/items/pending` — wpisy czekające na raport (z `item_id` i treścią do cytowania). `POST /api/reports?date=&replace=` — ten sam JSON co od Claude; cytat z `item_id` musi być dosłowny (inaczej 422 z listą błędów); cytat z samym `url` spoza wejścia → niezweryfikowany, raport „do weryfikacji” (R10); istniejący raport → 409, `replace=true` zastępuje (R6). Za zaraportowane uznawane są tylko wpisy użyte w cytatach albo na liście pominiętych.
+
+# Decyzje — etap 5 (dokument i PDF)
+
+## D20. Raport jako dokument
+
+Strona `/raporty/rrrr-mm-dd` wygląda jak dokument, a nie strona internetowa: kartka na tle „biurka”, szeryfowa typografia (Palatino / TeX Gyre Pagella — ta sama co w PDF), metryczka (przygotował, punkty, wpisy, źródła), numerowane sekcje (1. Podsumowanie, 2. Ustalenia z punktami 2.1, 2.2…, dalej pominięte wpisy, stan źródeł, wpisy źródłowe), cytaty z numerowanymi przypisami (tytuł, data, adres źródła) i powrotem do cytatu. Na telefonie kartka na całą szerokość; styl do druku (A4, bez menu). Numeracja punktów i przypisów pochodzi z jednego modelu (`ReportView`) — strona i PDF są zgodne.
+
+## D21. PDF z LaTeX-a
+
+- `.tex` generuje serwer z szablonu Scriban (`src/ZdrowieInfo.Server.Core/Export/report.tex.scriban`, wbudowany) — Claude nie pisze LaTeX-a. Własna formatka: `ZdrowieInfo:Export:TemplatePath` (ten sam model danych; formatkę z planu można przenieść później).
+- Każdy tekst przez `latex` (znaki `\ { } $ & # ^ _ % ~` i `"` — aktywny w babel-polish), adresy przez `latex_url` do `\url{}`. Test: tytuł z `\immediate\write18{…}` i `\input{/etc/passwd}` kompiluje się jako zwykły tekst, polecenie się nie wykonuje.
+- XeLaTeX: `fontspec` + `babel` (polski), czcionki TeX Gyre Pagella/Heros **po nazwie pliku** (działa bez rejestracji czcionek w systemie), `geometry`, `titlesec`, `fancyhdr`, `footmisc`, `hyperref`. Cytaty jako przypisy u dołu strony.
+- Kompilacja: `latexmk -xelatex -no-shell-escape -interaction=nonstopmode -halt-on-error` (domyślnie) albo `tectonic --untrusted` (`ZdrowieInfo:Export:Compiler`); katalog tymczasowy w katalogu danych, limit 60 s z zabiciem drzewa procesów, cache TeX-a (`TEXMFVAR`) w katalogu danych (usługa ma `ProtectSystem=strict`).
+- Pliki: `<DataDirectory>/reports/<rok>/raport-<data>.{tex,pdf}`, ścieżki i ostatni błąd (`pdf_error`) w raporcie. Eksport automatycznie po zapisaniu raportu (także z API); błąd nie blokuje raportu — PDF generuje się ponownie przy pobraniu.
+- Pobieranie (zalogowany): `/eksport/raport-rrrr-mm-dd.pdf` (otwierany w przeglądarce) i `.tex` (plik). Przyciski „Pobierz PDF” i „.tex” na stronie raportu. CLI: `--export-report [data]`.
+- Serwer: `install.sh` przy każdej instalacji i aktualizacji instaluje `texlive-xetex texlive-lang-polish texlive-latex-extra texlive-fonts-recommended fonts-texgyre latexmk` (bez rekomendacji, ok. 300 MB). `fonts-texgyre` jest konieczne: bez rekomendacji TeX Gyre w OpenType się nie instaluje i kompilacja kończy się błędem czcionki (sprawdzone w kontenerze Ubuntu 24.04).
+- Odpowiedzi `/eksport/*` nie dostają CSP stron ani `X-Frame-Options` (zostaje `nosniff`): `object-src 'none'`, `sandbox` i `X-Frame-Options: DENY` blokują wbudowaną przeglądarkę PDF (sprawdzone w Chromium).
+- Pola jednoliniowe (tytuł, nagłówki, nazwy, metadane PDF) przez `latex_line` — nowa linia jako spacja; `\par` w argumencie `\textbf` przerywałby kompilację.
+- Znaki, których nie ma w czcionce (np. emoji, niektóre strzałki), są pomijane w PDF bez błędu (ostrzeżenie w logu LaTeX-a).
+- Strona raportu w trybie ciemnym ma ciemną „kartkę” (zgodnie z ustawieniem systemu); PDF zawsze jasny.
+- **Do etapu 4:** `GenerateAsync` kończy się po eksporcie PDF (kilka sekund) — powiadomienie push trzeba wysłać po zapisaniu raportu, a przed eksportem, żeby nie czekało na LaTeX.

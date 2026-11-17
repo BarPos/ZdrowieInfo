@@ -118,23 +118,80 @@ table.list td { padding: .5rem; border-bottom: 1px solid var(--border); }
 .badge.high { background: var(--warn-bg); color: var(--warn-text); border-color: transparent; }
 .badge.warn { background: var(--warn-bg); color: var(--warn-text); border-color: transparent; }
 .badge.muted { color: var(--muted); }
-.report-nav { display: flex; justify-content: space-between; margin-bottom: 1rem; }
-.summary { font-size: 1.05rem; }
-.findings { margin: 1.5rem 0; }
-.findings h2 { display: flex; align-items: center; gap: .5rem; border-bottom: 2px solid var(--border); padding-bottom: .3rem; }
-.findings h2 .count { font-size: .85rem; color: var(--muted); font-weight: 400; }
-.importance-critical h2 { border-color: var(--danger); }
-.importance-high h2 { border-color: #c98a00; }
-.finding { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 1rem; margin-bottom: .75rem; }
-.finding h3 { margin: .1rem 0 .5rem; font-size: 1.05rem; }
-.finding .category { margin: 0; font-size: .75rem; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
-.finding .action { background: var(--ok-bg); color: var(--ok-text); padding: .5rem .75rem; border-radius: 6px; }
-.citation { margin: .75rem 0 0; padding: .5rem .75rem; border-left: 3px solid var(--accent); background: var(--bg); font-style: italic; }
-.citation.unverified { border-left-color: #c98a00; }
-.citation footer { font-style: normal; font-size: .85rem; color: var(--muted); margin-top: .3rem; }
 details.card { margin: 1rem 0; }
 details.card summary { cursor: pointer; font-weight: 600; }
 .item-list { padding-left: 1.2rem; }
 .item-list li { margin: .35rem 0; }
 .small { font-size: .85rem; }
 .key-plain { word-break: break-all; user-select: all; }
+
+/* Raport jako dokument: kartka, typografia szeryfowa jak w PDF (TeX Gyre Pagella / Palatino), numerowane sekcje, przypisy. */
+:root {
+    --paper: #ffffff; --paper-text: #1d2220; --paper-muted: #5d6b66; --paper-rule: #d7ddda; --desk: #e4e8e6;
+    --doc-serif: "Palatino Linotype", Palatino, "Book Antiqua", "TeX Gyre Pagella", "URW Palladio L", Georgia, serif;
+}
+@media (prefers-color-scheme: dark) {
+    :root { --paper: #1c2120; --paper-text: #e3e8e6; --paper-muted: #9aa8a3; --paper-rule: #34403d; --desk: #0d1110; }
+}
+body:has(.doc) { background: var(--desk); }
+.doc-toolbar { max-width: 52rem; margin: 0 auto .75rem; display: flex; flex-wrap: wrap; gap: .5rem 1rem; align-items: center; justify-content: space-between; }
+.doc-pager { display: flex; gap: 1rem; }
+.doc-downloads { display: flex; gap: .5rem; }
+.doc-downloads .btn { padding: .4rem .9rem; font-size: .9rem; }
+.doc {
+    max-width: 52rem; margin: 0 auto; background: var(--paper); color: var(--paper-text);
+    padding: 3.5rem 4rem 2.5rem; box-shadow: 0 1px 3px rgba(0,0,0,.12), 0 8px 24px rgba(0,0,0,.08); border-radius: 2px;
+    font-family: var(--doc-serif); font-size: 1.06rem; line-height: 1.55; hyphens: auto; -webkit-hyphens: auto;
+}
+.doc a { color: var(--accent); }
+.doc-kicker { margin: 0 0 .4rem; font-family: system-ui, sans-serif; font-size: .75rem; letter-spacing: .12em; text-transform: uppercase; color: var(--paper-muted); }
+.doc h1 { font-family: var(--doc-serif); font-size: 2rem; line-height: 1.2; margin: 0 0 .3rem; }
+.doc-date { margin: 0 0 1.2rem; color: var(--paper-muted); }
+.doc-meta { border-collapse: collapse; font-size: .9rem; margin-bottom: 1rem; }
+.doc-meta th { text-align: left; font-weight: 400; color: var(--paper-muted); padding: .1rem 1.5rem .1rem 0; vertical-align: top; }
+.doc-meta td { padding: .1rem 0; }
+.doc-note { background: var(--warn-bg); color: var(--warn-text); padding: .6rem .9rem; font-size: .92rem; border-radius: 3px; }
+.doc-note.error { background: var(--err-bg); color: var(--err-text); }
+.doc-head { border-bottom: 1px solid var(--paper-rule); padding-bottom: 1rem; margin-bottom: .5rem; }
+.doc section { margin-top: 1.8rem; }
+.doc h2 { font-family: system-ui, sans-serif; font-size: 1.1rem; color: var(--accent); margin: 0 0 .6rem; }
+.doc-num { font-variant-numeric: tabular-nums; margin-right: .35rem; }
+.doc-lead { font-size: 1.1rem; }
+.doc-group { font-family: system-ui, sans-serif; font-size: .75rem; letter-spacing: .1em; text-transform: uppercase; color: var(--paper-muted); margin: 1.4rem 0 .4rem; }
+.doc-group.importance-critical { color: var(--danger); }
+.doc-group.importance-high { color: #9a6200; }
+@media (prefers-color-scheme: dark) { .doc-group.importance-high { color: #f0c264; } }
+.doc-finding { margin: 0 0 1.4rem; }
+.doc-finding h4 { font-size: 1.06rem; margin: 0 0 .3rem; }
+.doc-finding .doc-cat { margin: 0 0 .1rem; font-family: system-ui, sans-serif; font-size: .72rem; letter-spacing: .06em; text-transform: uppercase; color: var(--paper-muted); }
+.doc-finding p { margin: .3rem 0; }
+.doc-action { background: var(--ok-bg); color: var(--ok-text); padding: .45rem .75rem; font-size: .95rem; border-radius: 3px; }
+.doc-quote { margin: .6rem 0 0 1.5rem; font-style: italic; color: var(--paper-text); }
+.doc-quote.unverified { border-left: 3px solid #c98a00; padding-left: .6rem; }
+.doc-fn { font-style: normal; font-size: .7em; margin-left: .1rem; }
+.doc-fn a { text-decoration: none; }
+.doc-list { padding-left: 1.4rem; }
+.doc-list li { margin: .3rem 0; }
+.doc-small { font-size: .92rem; }
+.doc-muted { color: var(--paper-muted); }
+.doc-footnotes { border-top: 1px solid var(--paper-rule); padding-top: .8rem; font-size: .85rem; }
+.doc-footnotes h2 { font-size: .85rem; color: var(--paper-muted); }
+.doc-footnotes ol { padding-left: 1.4rem; }
+.doc-footnotes li { margin: .25rem 0; word-break: break-word; }
+.doc-back { text-decoration: none; margin-left: .25rem; }
+.doc-foot { margin-top: 2.5rem; font-size: .8rem; color: var(--paper-muted); }
+:target { scroll-margin-top: 4rem; }
+@media (max-width: 640px) {
+    .doc { padding: 1.5rem 1.1rem 1.5rem; margin: 0 -1rem; box-shadow: none; font-size: 1.02rem; }
+    .doc h1 { font-size: 1.55rem; }
+    .doc-quote { margin-left: .75rem; }
+}
+@media print {
+    @page { size: A4; margin: 2cm; }
+    body, body:has(.doc) { background: #fff; }
+    .topbar, .doc-toolbar, #blazor-error-ui { display: none !important; }
+    .content { padding: 0; max-width: none; }
+    .doc { box-shadow: none; padding: 0; max-width: none; color: #000; background: #fff; font-size: 11pt; }
+    .doc a { color: #000; }
+    .doc-finding { break-inside: avoid; }
+}

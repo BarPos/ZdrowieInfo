@@ -61,6 +61,10 @@ SQL
     chmod 600 "$ENV_FILE"
 fi
 
+# Przy każdej instalacji i aktualizacji (apt pomija już zainstalowane): TeX do raportów PDF – kilkaset MB przy pierwszym razie.
+echo "== TeX do raportów PDF (XeLaTeX, polski, czcionki TeX Gyre)"
+apt-get install -y -qq --no-install-recommends texlive-xetex texlive-lang-polish texlive-latex-extra texlive-fonts-recommended fonts-texgyre latexmk >/dev/null
+
 echo "== Aplikacja"
 systemctl stop "$SERVICE" 2>/dev/null || true
 find "$APP_DIR" -mindepth 1 -delete

@@ -11,9 +11,14 @@ internal static class SecurityHeadersMiddleware
     public static IApplicationBuilder UseSecurityHeaders(this IApplicationBuilder app) => app.Use(async (context, next) =>
     {
         var headers = context.Response.Headers;
-        headers.ContentSecurityPolicy = ContentSecurityPolicy;
         headers.XContentTypeOptions = "nosniff";
-        headers.XFrameOptions = "DENY";
+        // Pliki raportu (PDF, .tex) otwiera wbudowana przeglądarka PDF – CSP stron (object-src 'none', sandbox)
+        // i X-Frame-Options ją blokują. To nie są strony HTML, więc tych nagłówków nie potrzebują.
+        if (!context.Request.Path.StartsWithSegments("/eksport"))
+        {
+            headers.ContentSecurityPolicy = ContentSecurityPolicy;
+            headers.XFrameOptions = "DENY";
+        }
         headers["Referrer-Policy"] = "same-origin";
         headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()";
         headers["Cross-Origin-Opener-Policy"] = "same-origin";

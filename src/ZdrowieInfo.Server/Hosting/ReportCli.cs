@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using ZdrowieInfo.Server.Common;
 using ZdrowieInfo.Server.Data;
+using ZdrowieInfo.Server.Export;
 using ZdrowieInfo.Server.Reports;
 
 namespace ZdrowieInfo.Server.Hosting;
@@ -33,6 +34,15 @@ internal static class ReportCli
                 Console.WriteLine($"Nie udało się: {result.Error}");
                 return 1;
         }
+    }
+
+    /// <summary>--export-report [data]: .tex i PDF raportu.</summary>
+    public static async Task<int> ExportAsync(IServiceProvider services, string? date)
+    {
+        var day = date is null ? services.GetRequiredService<WarsawClock>().Today : DateOnly.ParseExact(date, "yyyy-MM-dd");
+        var result = await services.GetRequiredService<ReportExporter>().ExportAsync(day);
+        Console.WriteLine(result.Success ? $"PDF: {result.PdfPath}\nTeX: {result.TexPath}" : $"Nie udało się: {result.Error}" + (result.TexPath is null ? "" : $"\nTeX: {result.TexPath}"));
+        return result.Success ? 0 : 1;
     }
 
     /// <summary>

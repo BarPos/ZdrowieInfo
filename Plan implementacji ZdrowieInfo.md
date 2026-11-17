@@ -247,6 +247,8 @@ Gotowe, gdy: na iPhonie (PWA z ekranu głównego, iOS ≥ 16.4) przychodzi push 
 
 ### Etap 5 — Eksport LaTeX i PDF (S–M)
 
+**Kod gotowy 17.11.2026** (przed etapem 4, na prośbę) — [docs/decyzje.md](docs/decyzje.md) (D20–D21): wbudowana formatka zamiast tej z planu (do podmiany przez `ZdrowieInfo:Export:TemplatePath`), latexmk z TeX Live; strona raportu w stylu dokumentu.
+
 1. `templates/report.tex.scriban` — na start prosta formatka zastępcza; Twoja formatka zastąpi ją, gdy ją przekażesz.
 2. Funkcja Scriban `latex_escape` (znaki z planu + `\textbackslash`, tylda i daszek przez `\textasciitilde{}`/`\textasciicircum{}`), URL-e przez `\url{}`.
 3. `IPdfCompiler`: `TectonicCompiler` i `LatexmkCompiler`; wybór w konfiguracji. Katalog tymczasowy, limit 60 s z zabiciem procesu, bez shell-escape (`-Z shell-escape` wyłączony / `-no-shell-escape`).

@@ -40,6 +40,12 @@ public class PushTests(PostgresFixture postgres)
         return (app, push);
     }
 
+    /// <summary>
+    /// Dzisiejsza data według aplikacji (czas warszawski). Raport z przeszłości nie wysyła powiadomienia, więc ani stała
+    /// data, ani DateTime.Now (strefa maszyny – w CI to UTC) nie nadają się do testów push.
+    /// </summary>
+    private static DateOnly Today(AppFactory app) => app.Services.GetRequiredService<WarsawClock>().Today;
+
     private static async Task AddSubscriptionAsync(AppFactory app, string endpoint)
     {
         await using var db = await app.DbAsync();
@@ -86,12 +92,13 @@ public class PushTests(PostgresFixture postgres)
         push.GoneEndpoints.Add("https://push.example/stary");
         await app.AddItemAsync("ezdrowie-podmioty", "Przerwa w PUI", "https://ezdrowie.gov.pl/portal/artykul/pui", "Platforma Usług Inteligentnych (PUI) będzie niedostępna w nocy.");
 
-        await app.Services.GetRequiredService<DailyReportService>().GenerateAsync(new DateOnly(2026, 11, 18));
+        var today = Today(app);
+        await app.Services.GetRequiredService<DailyReportService>().GenerateAsync(today);
         await app.Services.GetRequiredService<NotificationDispatcher>().DispatchPendingAsync();
 
         var (endpoint, message) = Assert.Single(push.Sent);
         Assert.Equal("https://push.example/telefon", endpoint);
-        Assert.Equal("/raporty/2026-11-18", message.Url);
+        Assert.Equal($"/raporty/{today:yyyy-MM-dd}", message.Url);
         Assert.Contains("wysokie: 1", message.Body);
         await using var db = await app.DbAsync();
         Assert.True((await db.Reports.SingleAsync()).PushSent);
@@ -104,7 +111,7 @@ public class PushTests(PostgresFixture postgres)
         var (app, push) = await StartAsync(postgres);
         await using var _app = app;
         await AddSubscriptionAsync(app, "https://push.example/telefon");
-        await app.Services.GetRequiredService<DailyReportService>().GenerateAsync(new DateOnly(2026, 11, 18));
+        await app.Services.GetRequiredService<DailyReportService>().GenerateAsync(Today(app));
         Assert.Equal("Brak zmian w monitorowanych źródłach.", Assert.Single(push.Sent).Message.Body);
     }
 
@@ -212,7 +219,7 @@ public class PushTests(PostgresFixture postgres)
         await app.Services.GetRequiredService<NotificationDispatcher>().DispatchPendingAsync();
         Assert.Equal(["https://push.example/szef"], push.Sent.Select(s => s.Endpoint).ToArray());
 
-        await app.Services.GetRequiredService<ZdrowieInfo.Server.Reports.DailyReportService>().GenerateAsync(DateOnly.FromDateTime(DateTime.Now));
+        await app.Services.GetRequiredService<ZdrowieInfo.Server.Reports.DailyReportService>().GenerateAsync(Today(app));
         Assert.Equal(2, push.Sent.Count(s => s.Message.Url.StartsWith("/raporty/")));
     }
 }

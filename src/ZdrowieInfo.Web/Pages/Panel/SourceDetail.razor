@@ -43,7 +43,7 @@
             }
         </MudText>
 
-        <MudTabs Elevation="1" Rounded="true" PanelClass="pa-4">
+        <MudTabs Elevation="1" Rounded="true" TabPanelsClass="pa-4">
             <MudTabPanel Text="Ustawienia i selektory">
                 <MudGrid>
                     <MudItem xs="12" md="6"><MudTextField T="string" @bind-Value="form.Name" Label="Nazwa" /></MudItem>
@@ -88,14 +88,14 @@
                         <MudItem xs="12" md="6"><MudTextField T="string" @bind-Value="form.NextPage" Label="Następna strona" HelperText="Link do kolejnej strony listy – sprawdzanie idzie dalej, dopóki wpisy są nowe" /></MudItem>
                         <MudItem xs="12" md="6"><MudTextField T="string" @bind-Value="form.OverflowUrl" Label="Lista zapasowa (adres)" HelperText="Gdy lista nie ma kolejnych stron, a wszystkie wpisy są nowe" /></MudItem>
                         <MudItem xs="12" md="6"><MudTextField T="string" @bind-Value="form.DetailContent" Label="Treść wpisu (strona wpisu)" HelperText="Puste = main / article / body" /></MudItem>
-                        <MudItem xs="12"><MudTextField T="string" @bind-Value="form.DetailRemove" Label="Usuń ze strony wpisu" HelperText="Selektory po jednym w linii" Lines="2" AutoGrow="true" /></MudItem>
+                        <MudItem xs="12"><MudTextField T="string" @bind-Value="form.DetailRemove" Label="Usuń ze strony wpisu" HelperText="Selektory po jednym w linii" Lines="2" Sizing="InputSizing.Auto" /></MudItem>
                     }
                     else
                     {
                         <MudItem xs="12"><MudTextField T="string" @bind-Value="form.Content" Label="Główna treść (content)" HelperText="Kilka selektorów po przecinku – łączone" /></MudItem>
-                        <MudItem xs="12"><MudTextField T="string" @bind-Value="form.Remove" Label="Usuń przed porównaniem" HelperText="Baner cookies, przyciski, data aktualizacji… po jednym w linii" Lines="2" AutoGrow="true" /></MudItem>
+                        <MudItem xs="12"><MudTextField T="string" @bind-Value="form.Remove" Label="Usuń przed porównaniem" HelperText="Baner cookies, przyciski, data aktualizacji… po jednym w linii" Lines="2" Sizing="InputSizing.Auto" /></MudItem>
                     }
-                    <MudItem xs="12"><MudTextField T="string" @bind-Value="form.Notes" Label="Uwagi" Lines="2" AutoGrow="true" /></MudItem>
+                    <MudItem xs="12"><MudTextField T="string" @bind-Value="form.Notes" Label="Uwagi" Lines="2" Sizing="InputSizing.Auto" /></MudItem>
                     <MudItem xs="12"><MudSwitch T="bool" @bind-Value="form.IsActive" Color="Color.Primary" Label="Aktywne" /></MudItem>
                 </MudGrid>
                 <MudStack Row="true" Spacing="2" Class="mt-4">

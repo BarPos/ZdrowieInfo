@@ -135,7 +135,7 @@ public class ExtractionTests(ITestOutputHelper output)
     {
         var source = Get(slug);
         var text = SourceExtractor.ExtractPageText(Fixtures.Read(slug, "a.html"), source.Url, source.Selectors);
-        output.WriteLine(text);
+        output.WriteLine(text ?? "(brak)");
 
         Assert.NotNull(text);
         Assert.True(text.Length > 200, $"{slug}: {text.Length} znaków");
@@ -173,7 +173,7 @@ public class ExtractionTests(ITestOutputHelper output)
     {
         var source = Get(slug);
         var text = SourceExtractor.ExtractDetailText(Fixtures.Read(slug, "detail.html"), source.Url, source.Selectors);
-        output.WriteLine(text);
+        output.WriteLine(text ?? "(brak)");
         Assert.NotNull(text);
         Assert.Contains(expected, text, StringComparison.OrdinalIgnoreCase);
         Assert.True(text.Length < 20_000, $"{slug}: {text.Length} znaków – selektor łapie za dużo");

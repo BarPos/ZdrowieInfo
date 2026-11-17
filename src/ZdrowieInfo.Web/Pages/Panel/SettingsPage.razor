@@ -34,9 +34,9 @@
                         <MudCheckBox T="bool" Value="services.Contains(service)" ValueChanged="v => ToggleService(service, v)" Label="@service" Dense="true" />
                     }
                     <MudSwitch T="bool" @bind-Value="keyEntity" Color="Color.Primary" Label="Podmiot kluczowy w KSC" Class="mt-2" />
-                    <MudTextField T="string" @bind-Value="systems" Label="Używane systemy" Lines="5" AutoGrow="true" Class="mt-2"
+                    <MudTextField T="string" @bind-Value="systems" Label="Używane systemy" Lines="5" Sizing="InputSizing.Auto" Class="mt-2"
                                   HelperText="Po jednym w linii: system gabinetowy (nazwa, wersja), firewall, serwery, VPN, przeglądarki… Bez tej listy podatności dostają ważność średnią." />
-                    <MudTextField T="string" @bind-Value="notes" Label="Inne uwagi dla analizy" Lines="2" AutoGrow="true" Class="mt-2" />
+                    <MudTextField T="string" @bind-Value="notes" Label="Inne uwagi dla analizy" Lines="2" Sizing="InputSizing.Auto" Class="mt-2" />
                     <MudButton Variant="Variant.Filled" Color="Color.Primary" Class="mt-3" OnClick="SaveProfile">Zapisz profil</MudButton>
                 </MudPaper>
             </MudItem>

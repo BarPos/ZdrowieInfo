@@ -73,7 +73,7 @@ public class McpTests(PostgresFixture postgres)
         var tools = await client.ListToolsAsync(cancellationToken: TestContext.Current.CancellationToken);
         Assert.Equal(["get_report", "list_sources", "search_reports"], tools.Select(t => t.Name).Order());
         Assert.All(tools, t => Assert.True(t.ProtocolTool.Annotations?.ReadOnlyHint));
-        Assert.Equal("zdrowieinfo", client.ServerInfo.Name);
+        Assert.Equal("zdrowieinfo", client.ServerInfo?.Name);
     }
 
     [Fact]

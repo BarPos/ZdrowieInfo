@@ -8,21 +8,28 @@ namespace ZdrowieInfo.Server.Hosting;
 
 internal static class ReportCli
 {
-    /// <summary>--generate-report [data] [--replace]</summary>
+    /// <summary>--generate-report [rrrr-mm-dd | rrrr-mm-dd--rrrr-mm-dd] [--replace]: dziś, raport wstecz albo okresowy.</summary>
     public static async Task<int> GenerateAsync(IServiceProvider services, string? date, bool replace)
     {
-        var day = date is null ? services.GetRequiredService<WarsawClock>().Today : DateOnly.ParseExact(date, "yyyy-MM-dd");
-        var result = await services.GetRequiredService<DailyReportService>().GenerateAsync(day, replace, finalAttempt: true);
+        var key = ReportKey.Daily(services.GetRequiredService<WarsawClock>().Today);
+        if (date is not null && !ReportKey.TryParse(date, out key))
+        {
+            Console.Error.WriteLine("--generate-report: podaj dzień rrrr-mm-dd albo okres rrrr-mm-dd--rrrr-mm-dd.");
+            return 2;
+        }
+        var result = await services.GetRequiredService<DailyReportService>().GenerateForAsync(key.Start, key.End, replace);
+        foreach (var note in result.Notes ?? []) Console.WriteLine($"  archiwum: {note}");
+        var day = key.Label;
         switch (result.Outcome)
         {
             case ReportRunOutcome.AlreadyExists:
-                Console.WriteLine($"Raport na {day:dd.MM.yyyy} już istnieje (id {result.ReportId}). Użyj --replace, żeby go zastąpić.");
+                Console.WriteLine($"Raport {day} już istnieje (id {result.ReportId}). Użyj --replace, żeby go zastąpić.");
                 return 1;
             case ReportRunOutcome.Created:
                 await using (var db = await services.GetRequiredService<IDbContextFactory<ZdrowieInfoDbContext>>().CreateDbContextAsync())
                 {
                     var report = await db.Reports.AsNoTracking().Include(r => r.Findings).SingleAsync(r => r.Id == result.ReportId);
-                    Console.WriteLine($"Raport {day:dd.MM.yyyy}: {report.Title} ({report.Status}, {report.Findings.Count} punktów).");
+                    Console.WriteLine($"Raport {day}: {report.Title} ({report.Status}, {report.Findings.Count} punktów).");
                     foreach (var issue in report.ValidationIssues) Console.WriteLine($"  uwaga: {issue}");
                     if (report.Error is not null) Console.WriteLine($"  błąd: {report.Error}");
                 }
@@ -36,11 +43,16 @@ internal static class ReportCli
         }
     }
 
-    /// <summary>--export-report [data]: .tex i PDF raportu.</summary>
+    /// <summary>--export-report [rrrr-mm-dd | rrrr-mm-dd--rrrr-mm-dd]: .tex i PDF raportu.</summary>
     public static async Task<int> ExportAsync(IServiceProvider services, string? date)
     {
-        var day = date is null ? services.GetRequiredService<WarsawClock>().Today : DateOnly.ParseExact(date, "yyyy-MM-dd");
-        var result = await services.GetRequiredService<ReportExporter>().ExportAsync(day);
+        var key = ReportKey.Daily(services.GetRequiredService<WarsawClock>().Today);
+        if (date is not null && !ReportKey.TryParse(date, out key))
+        {
+            Console.Error.WriteLine("--export-report: podaj dzień rrrr-mm-dd albo okres rrrr-mm-dd--rrrr-mm-dd.");
+            return 2;
+        }
+        var result = await services.GetRequiredService<ReportExporter>().ExportAsync(key);
         Console.WriteLine(result.Success ? $"PDF: {result.PdfPath}\nTeX: {result.TexPath}" : $"Nie udało się: {result.Error}" + (result.TexPath is null ? "" : $"\nTeX: {result.TexPath}"));
         return result.Success ? 0 : 1;
     }

@@ -1,0 +1,199 @@
+@page "/panel/raporty"
+@rendermode InteractiveServer
+@implements IDisposable
+@using System.Security.Claims
+@using Microsoft.EntityFrameworkCore
+@using ZdrowieInfo.Server.Common
+@using ZdrowieInfo.Server.Data
+@using ZdrowieInfo.Server.Reports
+@inject IDbContextFactory<ZdrowieInfoDbContext> DbFactory
+@inject ReportJobQueue Jobs
+@inject DailyReportService ReportService
+@inject WarsawClock Clock
+@inject AuthenticationStateProvider AuthState
+@inject ISnackbar Snackbar
+@inject IDialogService Dialogs
+
+<PageTitle>Raporty – panel – ZdrowieInfo</PageTitle>
+
+<AdminShell>
+    <MudText Typo="Typo.h4" Class="mb-2">Raporty</MudText>
+    <MudText Typo="Typo.body2" Class="mb-4">
+        Raport dzienny powstaje sam co rano. Tutaj przygotujesz raport za wcześniejszy dzień albo raport okresowy (od dnia do dnia,
+        najwyżej @DailyReportService.MaxPeriodDays dni) z wpisów opublikowanych w tych dniach. Jeśli znane wpisy źródła nie sięgają tak daleko,
+        aplikacja najpierw przejrzy starsze strony list i pobierze treść wpisów – to może potrwać kilka minut. Raporty wstecz nie wysyłają powiadomień.
+    </MudText>
+
+    <MudGrid Class="mb-4">
+        <MudItem xs="12" md="6">
+            <MudPaper Class="pa-4" Elevation="1">
+                <MudText Typo="Typo.h6" Class="mb-2">Raport dzienny</MudText>
+                <MudStack Row="true" Spacing="3" AlignItems="AlignItems.Center" Wrap="Wrap.Wrap">
+                    <MudDatePicker Label="Dzień" @bind-Date="day" MaxDate="Today" DateFormat="dd.MM.yyyy" Style="max-width:180px" />
+                    <MudCheckBox T="bool" @bind-Value="replaceDaily" Label="Zastąp istniejący" />
+                    <MudButton Variant="Variant.Filled" Color="Color.Primary" Disabled="day is null" OnClick="QueueDaily">Przygotuj</MudButton>
+                </MudStack>
+            </MudPaper>
+        </MudItem>
+        <MudItem xs="12" md="6">
+            <MudPaper Class="pa-4" Elevation="1">
+                <MudText Typo="Typo.h6" Class="mb-2">Raport okresowy</MudText>
+                <MudStack Row="true" Spacing="3" AlignItems="AlignItems.Center" Wrap="Wrap.Wrap">
+                    <MudDatePicker Label="Od" @bind-Date="from" MaxDate="Today" DateFormat="dd.MM.yyyy" Style="max-width:160px" />
+                    <MudDatePicker Label="Do" @bind-Date="to" MaxDate="Today" DateFormat="dd.MM.yyyy" Style="max-width:160px" />
+                    <MudCheckBox T="bool" @bind-Value="replacePeriod" Label="Zastąp istniejący" />
+                    <MudButton Variant="Variant.Filled" Color="Color.Primary" Disabled="from is null || to is null" OnClick="QueuePeriod">Przygotuj</MudButton>
+                </MudStack>
+            </MudPaper>
+        </MudItem>
+    </MudGrid>
+
+    @if (Jobs.Jobs.Count > 0)
+    {
+        <MudText Typo="Typo.h6" Class="mb-2">Zlecenia</MudText>
+        <MudSimpleTable Dense="true" Class="mb-4">
+            <thead><tr><th>Raport</th><th>Zlecił</th><th>Stan</th><th>Wynik</th></tr></thead>
+            <tbody>
+                @foreach (var job in Jobs.Jobs)
+                {
+                    <tr>
+                        <td>@(job.Key.Kind == ReportKind.Daily ? "dzienny" : "okresowy") @job.Key.Label@(job.Replace ? " (zastąp)" : "")</td>
+                        <td>@job.RequestedBy, @Labels.Time(job.QueuedAt)</td>
+                        <td>
+                            @switch (job.State)
+                            {
+                                case ReportJobState.Queued: <span>w kolejce</span> break;
+                                case ReportJobState.Running: <MudProgressCircular Size="Size.Small" Indeterminate="true" /> <span> w toku…</span> break;
+                                case ReportJobState.Done: <MudChip T="string" Size="Size.Small" Color="Color.Success">gotowy</MudChip> break;
+                                default: <MudChip T="string" Size="Size.Small" Color="Color.Warning">nieudane</MudChip> break;
+                            }
+                        </td>
+                        <td>
+                            @job.Message
+                            @if (job.Result is { } key) { <MudLink Href="@($"raporty/{key.Slug}")"> Otwórz</MudLink> }
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </MudSimpleTable>
+    }
+
+    <MudDataGrid @ref="grid" T="Row" ServerData="LoadServerData" Dense="true" Hover="true">
+        <Columns>
+            <TemplateColumn Title="Raport">
+                <CellTemplate>
+                    <MudLink Href="@($"raporty/{context.Item.Key.Slug}")">@context.Item.Key.Label</MudLink>
+                    @if (context.Item.Key.Kind == ReportKind.Period) { <MudChip T="string" Size="Size.Small">okresowy</MudChip> }
+                </CellTemplate>
+            </TemplateColumn>
+            <PropertyColumn Property="r => r.Title" Title="Tytuł" />
+            <PropertyColumn Property="r => StatusText(r)" Title="Stan" />
+            <PropertyColumn Property="r => r.Findings" Title="Punkty" />
+            <PropertyColumn Property="r => r.Producer" Title="Przygotował" />
+            <TemplateColumn Title="Link">
+                <CellTemplate>@(context.Item.Shared ? "udostępniony" : "")</CellTemplate>
+            </TemplateColumn>
+            <TemplateColumn>
+                <CellTemplate>
+                    <MudStack Row="true" Spacing="1">
+                        <MudButton Size="Size.Small" OnClick="() => Regenerate(context.Item)">Przygotuj ponownie</MudButton>
+                        <MudButton Size="Size.Small" Color="Color.Error" OnClick="() => Delete(context.Item)">Usuń</MudButton>
+                    </MudStack>
+                </CellTemplate>
+            </TemplateColumn>
+        </Columns>
+        <NoRecordsContent><MudText>Nie ma jeszcze raportów.</MudText></NoRecordsContent>
+        <PagerContent>
+            <MudDataGridPager T="Row" PageSizeOptions="[25, 50, 100]" RowsPerPageString="Wierszy na stronę:" />
+        </PagerContent>
+    </MudDataGrid>
+</AdminShell>
+
+@code {
+    private sealed record Row(ReportKey Key, string Title, ReportStatus Status, bool IsEmpty, int Findings, string Producer, bool Shared);
+
+    private MudDataGrid<Row>? grid;
+    private DateTime? day, from, to;
+    private bool replaceDaily, replacePeriod;
+    private string login = "";
+
+    private DateTime Today => Clock.Today.ToDateTime(TimeOnly.MinValue);
+
+    protected override async Task OnInitializedAsync()
+    {
+        login = (await AuthState.GetAuthenticationStateAsync()).User.Identity?.Name ?? "";
+        day = Today.AddDays(-1);
+        to = Today.AddDays(-1);
+        from = Today.AddDays(-7);
+        Jobs.Changed += OnJobsChanged;
+    }
+
+    public void Dispose() => Jobs.Changed -= OnJobsChanged;
+
+    // Zlecenie skończone w tle: odśwież listę zleceń i tabelę raportów.
+    private void OnJobsChanged() => _ = InvokeAsync(async () =>
+    {
+        if (grid is not null) await grid.ReloadServerData();
+        StateHasChanged();
+    });
+
+    private async Task<GridData<Row>> LoadServerData(GridState<Row> state, CancellationToken ct)
+    {
+        await using var db = await DbFactory.CreateDbContextAsync(ct);
+        var total = await db.Reports.CountAsync(ct);
+        var page = await db.Reports.AsNoTracking()
+            .OrderByDescending(r => r.Date).ThenBy(r => r.Kind).ThenByDescending(r => r.PeriodStart)
+            .Skip(state.Page * state.PageSize).Take(state.PageSize)
+            .Select(r => new { r.Kind, r.PeriodStart, r.Date, r.Title, r.Status, r.IsEmpty, Findings = r.Findings.Count, r.Producer, Shared = r.ShareToken != null })
+            .ToListAsync(ct);
+        return new GridData<Row>
+        {
+            TotalItems = total,
+            Items = page.Select(r => new Row(new ReportKey(r.Kind, r.PeriodStart, r.Date), r.Title, r.Status, r.IsEmpty, r.Findings, r.Producer, r.Shared)).ToList(),
+        };
+    }
+
+    private static string StatusText(Row r) => r.IsEmpty ? "brak zmian" : r.Status switch
+    {
+        ReportStatus.NeedsReview => "do weryfikacji",
+        ReportStatus.AiError => "bez analizy",
+        _ => "gotowy",
+    };
+
+    private void QueueDaily()
+    {
+        var date = DateOnly.FromDateTime(day!.Value);
+        Jobs.Enqueue(date, date, replaceDaily, login);
+        Snackbar.Add($"Zlecono raport za {date:dd.MM.yyyy}.", Severity.Info);
+    }
+
+    private void QueuePeriod()
+    {
+        var (a, b) = (DateOnly.FromDateTime(from!.Value), DateOnly.FromDateTime(to!.Value));
+        if (a > b) (a, b) = (b, a);
+        if (a == b)
+        {
+            Snackbar.Add("Okres jednodniowy to raport dzienny – użyj formularza obok.", Severity.Warning);
+            return;
+        }
+        Jobs.Enqueue(a, b, replacePeriod, login);
+        Snackbar.Add($"Zlecono raport okresowy {ReportKey.Period(a, b).Label}.", Severity.Info);
+    }
+
+    private async Task Regenerate(Row row)
+    {
+        if (await Dialogs.ShowMessageBoxAsync("Przygotować raport ponownie?",
+                $"Raport {row.Key.Label} zostanie przygotowany od nowa z tych samych dni (to kolejne wywołanie Claude). Publiczny link zostaje.",
+                yesText: "Przygotuj ponownie", cancelText: "Anuluj") != true) return;
+        Jobs.Enqueue(row.Key.Start, row.Key.End, replace: true, login);
+    }
+
+    private async Task Delete(Row row)
+    {
+        if (await Dialogs.ShowMessageBoxAsync("Usunąć raport?",
+                $"Raport {row.Key.Label}, jego PDF i publiczny link zostaną usunięte. Wpisy źródłowe zostają (nie wrócą do raportu dziennego). Tego nie da się cofnąć.",
+                yesText: "Usuń", cancelText: "Anuluj") != true) return;
+        if (await ReportService.DeleteAsync(row.Key)) Snackbar.Add($"Usunięto raport {row.Key.Label}.", Severity.Success);
+        if (grid is not null) await grid.ReloadServerData();
+    }
+}

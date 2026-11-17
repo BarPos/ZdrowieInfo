@@ -36,6 +36,7 @@ public sealed class SourceAdminService(IDbContextFactory<ZdrowieInfoDbContext> d
         if (rebaseline)
         {
             source.BaselineAt = null;
+            source.ArchiveFrom = null; // inny adres albo selektory – przejrzane archiwum nieaktualne
             source.ETag = null;
             source.LastModified = null;
             source.ContentHash = null;

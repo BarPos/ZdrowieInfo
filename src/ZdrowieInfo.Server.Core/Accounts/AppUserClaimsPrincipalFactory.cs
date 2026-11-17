@@ -5,7 +5,10 @@ using ZdrowieInfo.Server.Data;
 
 namespace ZdrowieInfo.Server.Accounts;
 
-/// <summary>Dodaje claim <see cref="MfaClaims.Enabled"/>; odświeżany przy logowaniu, RefreshSignInAsync i walidacji security stamp.</summary>
+/// <summary>
+/// Dodaje claim <see cref="MfaClaims.Enabled"/> i rolę (<see cref="AppRoles"/>); odświeżane przy logowaniu, RefreshSignInAsync
+/// i walidacji security stamp (co 5 minut).
+/// </summary>
 public sealed class AppUserClaimsPrincipalFactory(UserManager<AppUser> userManager, IOptions<IdentityOptions> options)
     : UserClaimsPrincipalFactory<AppUser>(userManager, options)
 {
@@ -14,6 +17,7 @@ public sealed class AppUserClaimsPrincipalFactory(UserManager<AppUser> userManag
         var identity = await base.GenerateClaimsAsync(user);
         if (await UserManager.GetTwoFactorEnabledAsync(user))
             identity.AddClaim(new Claim(MfaClaims.Enabled, "1"));
+        identity.AddClaim(new Claim(Options.ClaimsIdentity.RoleClaimType, AppRoles.Name(user.Role)));
         return identity;
     }
 }

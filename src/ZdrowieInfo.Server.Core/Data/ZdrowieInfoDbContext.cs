@@ -30,6 +30,26 @@ public sealed class ZdrowieInfoDbContext(DbContextOptions<ZdrowieInfoDbContext> 
     public DbSet<ApiKey> ApiKeys => Set<ApiKey>();
     public DbSet<PushSubscriptionRecord> PushSubscriptions => Set<PushSubscriptionRecord>();
 
+    public override int SaveChanges(bool acceptAllChangesOnSuccess)
+    {
+        NormalizeReports();
+        return base.SaveChanges(acceptAllChangesOnSuccess);
+    }
+
+    public override Task<int> SaveChangesAsync(bool acceptAllChangesOnSuccess, CancellationToken cancellationToken = default)
+    {
+        NormalizeReports();
+        return base.SaveChangesAsync(acceptAllChangesOnSuccess, cancellationToken);
+    }
+
+    /// <summary>Raport dzienny: początek okresu = data (unikalność i <see cref="ReportQueries.WhereKey"/> na tym polegają).</summary>
+    private void NormalizeReports()
+    {
+        foreach (var entry in ChangeTracker.Entries<Report>())
+            if (entry.State is EntityState.Added or EntityState.Modified && entry.Entity.Kind == ReportKind.Daily)
+                entry.Entity.PeriodStart = entry.Entity.Date;
+    }
+
     protected override void OnModelCreating(ModelBuilder builder)
     {
         base.OnModelCreating(builder);
@@ -109,7 +129,12 @@ public sealed class ZdrowieInfoDbContext(DbContextOptions<ZdrowieInfoDbContext> 
         builder.Entity<Report>(e =>
         {
             e.ToTable("reports");
-            e.HasIndex(x => x.Date).IsUnique();
+            e.HasIndex(x => new { x.Kind, x.PeriodStart, x.Date }).IsUnique();
+            e.HasIndex(x => x.Date);
+            e.HasIndex(x => x.ShareToken).IsUnique();
+            e.Property(x => x.Kind).HasConversion<string>().HasMaxLength(20);
+            e.Property(x => x.ShareToken).HasMaxLength(64);
+            e.Ignore(x => x.Key);
             e.Property(x => x.Status).HasConversion<string>().HasMaxLength(20);
             e.Property(x => x.Title).HasMaxLength(500);
             e.Property(x => x.Producer).HasMaxLength(100);

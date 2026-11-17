@@ -20,8 +20,8 @@ public sealed record ReportView(
     IReadOnlyList<string> Recoveries,
     int SourcesChecked,
     IReadOnlyList<ReportView.Entry> Entries,
-    DateOnly? PreviousDay,
-    DateOnly? NextDay)
+    ReportKey? Previous,
+    ReportKey? Next)
 {
     public sealed record FindingGroup(Importance Importance, string Heading, IReadOnlyList<FindingEntry> Findings);
 
@@ -34,6 +34,13 @@ public sealed record ReportView(
     public sealed record IgnoredEntry(string Title, string? Url, string Reason);
 
     public sealed record Entry(long Id, string Title, string Url, string Source, DateOnly? PublishedOn);
+
+    private static readonly System.Globalization.CultureInfo Pl = System.Globalization.CultureInfo.GetCultureInfo("pl-PL");
+
+    public string KindLabel => Report.Kind == ReportKind.Period ? "raport okresowy" : "raport dzienny";
+
+    /// <summary>Raport wstecz i okresowy nie ma stanu źródeł z dnia raportu (dzisiejszy stan byłby mylący).</summary>
+    public bool HasSourcesState => Report.SourcesState.Count > 0;
 
     /// <summary>Numery sekcji: zależą od tego, które sekcje występują.</summary>
     public int SectionFindings => 2;
@@ -55,24 +62,35 @@ public sealed record ReportView(
         _ => producer,
     };
 
-    public static async Task<ReportView?> LoadAsync(ZdrowieInfoDbContext db, DateOnly date, CancellationToken ct = default)
+    public static Task<ReportView?> LoadAsync(ZdrowieInfoDbContext db, DateOnly date, CancellationToken ct = default) =>
+        LoadAsync(db, ReportKey.Daily(date), ct);
+
+    public static async Task<ReportView?> LoadAsync(ZdrowieInfoDbContext db, ReportKey key, CancellationToken ct = default)
     {
         var report = await db.Reports.AsNoTracking().AsSplitQuery()
             .Include(r => r.Findings).ThenInclude(f => f.Citations)
-            .SingleOrDefaultAsync(r => r.Date == date, ct);
+            .WhereKey(key).SingleOrDefaultAsync(ct);
         if (report is null) return null;
 
+        // Wpisy wejścia: zapisane w raporcie (każdy nowy raport) albo – dla starych raportów – te, które raport „zabrał”.
+        var ids = report.InputItemIds;
         var entries = await (from i in db.SourceItems.AsNoTracking()
                              join s in db.Sources on i.SourceId equals s.Id
-                             where i.ReportId == report.Id
+                             where i.ReportId == report.Id || ids.Contains(i.Id)
                              orderby i.PublishedOn descending, i.Id
                              select new Entry(i.Id, i.Title, i.Url, s.Name, i.PublishedOn)).ToListAsync(ct);
-        var previous = await db.Reports.Where(r => r.Date < date).OrderByDescending(r => r.Date).Select(r => (DateOnly?)r.Date).FirstOrDefaultAsync(ct);
-        var next = await db.Reports.Where(r => r.Date > date).OrderBy(r => r.Date).Select(r => (DateOnly?)r.Date).FirstOrDefaultAsync(ct);
-        return Build(report, entries, previous, next);
+        // Nawigacja ←/→ między raportami tego samego rodzaju.
+        var same = db.Reports.Where(r => r.Kind == key.Kind);
+        var previous = await same.Where(r => r.Date < key.End || (r.Date == key.End && r.PeriodStart < key.Start))
+            .OrderByDescending(r => r.Date).ThenByDescending(r => r.PeriodStart).Select(r => new { r.Kind, r.PeriodStart, r.Date }).FirstOrDefaultAsync(ct);
+        var next = await same.Where(r => r.Date > key.End || (r.Date == key.End && r.PeriodStart > key.Start))
+            .OrderBy(r => r.Date).ThenBy(r => r.PeriodStart).Select(r => new { r.Kind, r.PeriodStart, r.Date }).FirstOrDefaultAsync(ct);
+        return Build(report, entries,
+            previous is null ? null : new ReportKey(previous.Kind, previous.PeriodStart, previous.Date),
+            next is null ? null : new ReportKey(next.Kind, next.PeriodStart, next.Date));
     }
 
-    public static ReportView Build(Report report, IReadOnlyList<Entry> entries, DateOnly? previous = null, DateOnly? next = null)
+    public static ReportView Build(Report report, IReadOnlyList<Entry> entries, ReportKey? previous = null, ReportKey? next = null)
     {
         var footnotes = new List<Footnote>();
         var groups = new List<FindingGroup>();
@@ -110,7 +128,9 @@ public sealed record ReportView(
 
         return new ReportView(
             report,
-            report.Date.ToString("dddd, d MMMM yyyy", System.Globalization.CultureInfo.GetCultureInfo("pl-PL")),
+            report.Kind == ReportKind.Period
+                ? $"od {report.PeriodStart.ToString("d MMMM yyyy", Pl)} do {report.Date.ToString("d MMMM yyyy", Pl)}"
+                : report.Date.ToString("dddd, d MMMM yyyy", Pl),
             Producer(report.Producer, report.Model == "sample" ? null : report.Model),
             note,
             groups,

@@ -225,3 +225,21 @@ table.incidents .details { max-width: 28rem; color: var(--muted); }
 .search-snippet { margin: .2rem 0; }
 .search-snippet mark { background: #ffe58a; color: #1d2220; padding: 0 .1em; border-radius: 2px; }
 .search-sources { margin: .3rem 0 0; font-size: .85rem; color: var(--muted); display: flex; flex-wrap: wrap; gap: .25rem .75rem; }
+
+/* Komunikat po akcji (usunięcie raportu, link). */
+.notice { background: var(--ok-bg); color: var(--ok-text); border-radius: var(--radius); padding: .6rem .9rem; }
+
+/* Stronicowanie list (raporty, wyszukiwanie, incydenty). */
+.pager { display: flex; align-items: center; justify-content: center; gap: 1rem; margin: 1.5rem 0; flex-wrap: wrap; }
+.pager-info { color: var(--muted); }
+
+/* Udostępnianie i usuwanie raportu (administrator), pod dokumentem. */
+.doc-admin { max-width: 52rem; margin: 1.5rem auto; }
+.doc-admin h2 { margin-top: 0; font-size: 1.15rem; }
+.doc-admin .actions { display: flex; gap: .5rem; flex-wrap: wrap; }
+.doc-admin form { margin: 0; }
+.share-link { width: 100%; font: inherit; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .85rem;
+    padding: .5rem; border: 1px solid var(--border); border-radius: 8px; background: var(--bg); color: var(--text); }
+.danger-zone { margin-top: 1.25rem; border-top: 1px solid var(--border); padding-top: .75rem; }
+.danger-zone summary { cursor: pointer; color: var(--danger); font-weight: 600; }
+@media print { .doc-admin { display: none; } }

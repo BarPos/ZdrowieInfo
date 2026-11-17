@@ -1,0 +1,30 @@
+@* Stronicowanie dla stron statycznych (SSR): linki z parametrem „strona”, pozostałe parametry adresu zostają. *@
+@inject NavigationManager Nav
+
+@if (Page > 1 || HasMore)
+{
+    <nav class="pager" aria-label="Strony wyników">
+        @if (Page > 1)
+        {
+            <a class="btn" href="@Link(Page - 1)" rel="prev">← Poprzednia</a>
+        }
+        <span class="pager-info">strona @Page@(TotalPages is { } total ? $" z {total}" : "")</span>
+        @if (HasMore)
+        {
+            <a class="btn" href="@Link(Page + 1)" rel="next">Następna →</a>
+        }
+    </nav>
+}
+
+@code {
+    public const string Parameter = "strona";
+
+    [Parameter, EditorRequired] public int Page { get; set; }
+    [Parameter, EditorRequired] public bool HasMore { get; set; }
+    [Parameter] public int? TotalPages { get; set; }
+
+    /// <summary>Numer strony z parametru (1, gdy brak albo niepoprawny), ograniczony do rozsądnego zakresu.</summary>
+    public static int Normalize(int? page) => page is > 0 and <= 10_000 ? page.Value : 1;
+
+    private string Link(int page) => Nav.GetUriWithQueryParameter(Parameter, page == 1 ? null : page);
+}

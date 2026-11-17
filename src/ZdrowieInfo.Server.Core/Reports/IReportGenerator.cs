@@ -1,6 +1,13 @@
 namespace ZdrowieInfo.Server.Reports;
 
-public sealed record GenerationRequest(DateOnly Date, ClinicProfile Profile, IReadOnlyList<ReportInputItem> Items, IReadOnlyList<string>? PreviousErrors = null);
+/// <param name="Date">Dzień raportu albo ostatni dzień okresu.</param>
+/// <param name="PeriodStart">Raport okresowy: pierwszy dzień okresu.</param>
+/// <param name="Retrospective">Raport wstecz (wpisy opublikowane w danym dniu/okresie, nie „nowe od ostatniego raportu”).</param>
+public sealed record GenerationRequest(DateOnly Date, ClinicProfile Profile, IReadOnlyList<ReportInputItem> Items, IReadOnlyList<string>? PreviousErrors = null,
+    DateOnly? PeriodStart = null, bool Retrospective = false)
+{
+    public ReportKey Key => PeriodStart is { } start ? ReportKey.Period(start, Date) : ReportKey.Daily(Date);
+}
 
 public sealed record GenerationResult(ReportDocument Document, string Model, AiUsage Usage);
 

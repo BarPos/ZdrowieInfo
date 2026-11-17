@@ -34,14 +34,14 @@ public static class TestData
         return item;
     }
 
-    /// <summary>Przeglądarka po pełnym logowaniu: hasło + skonfigurowane TOTP.</summary>
-    public static async Task<HttpClient> SignedInBrowserAsync(this AppFactory app)
+    /// <summary>Przeglądarka po pełnym logowaniu: hasło + skonfigurowane TOTP (domyślnie administrator).</summary>
+    public static async Task<HttpClient> SignedInBrowserAsync(this AppFactory app, UserRole role = UserRole.Admin, string login = Login)
     {
-        await app.CreateUserAsync(Login, Password);
+        await app.CreateUserAsync(login, Password, role);
         var browser = app.CreateBrowser();
         await browser.SubmitAsync("/Account/Login", "login", new Dictionary<string, string>
         {
-            ["Input.UserName"] = Login, ["Input.Password"] = Password, ["Input.RememberMe"] = "true",
+            ["Input.UserName"] = login, ["Input.Password"] = Password, ["Input.RememberMe"] = "true",
         });
         const string page = "/Account/Manage/EnableAuthenticator";
         var document = await browser.GetDocumentAsync(page);

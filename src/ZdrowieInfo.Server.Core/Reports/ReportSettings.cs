@@ -36,6 +36,7 @@ public sealed class ReportSettings(AppSettingsStore store)
     private const string ClaudeKey = "claude.settings";
     private const string ApiKeyKey = "claude.api_key";
     private const string AttemptsKey = "reports.attempts";
+    private const string SkipKey = "reports.skip_date";
 
     public async Task<ClinicProfile> GetProfileAsync(CancellationToken ct = default) => await store.GetAsync<ClinicProfile>(ProfileKey, ct) ?? new();
     public Task SetProfileAsync(ClinicProfile profile, CancellationToken ct = default) => store.SetAsync(ProfileKey, profile, ct: ct);
@@ -49,4 +50,10 @@ public sealed class ReportSettings(AppSettingsStore store)
 
     public Task<ReportAttempts?> GetAttemptsAsync(CancellationToken ct = default) => store.GetAsync<ReportAttempts>(AttemptsKey, ct);
     public Task SetAttemptsAsync(ReportAttempts attempts, CancellationToken ct = default) => store.SetAsync(AttemptsKey, attempts, ct: ct);
+
+    /// <summary>Dzień, na który harmonogram ma nie przygotowywać raportu (administrator usunął dzisiejszy raport).</summary>
+    public async Task<DateOnly?> GetSkipDateAsync(CancellationToken ct = default) => (await store.GetAsync<SkipDate>(SkipKey, ct))?.Date;
+    public Task SetSkipDateAsync(DateOnly date, CancellationToken ct = default) => store.SetAsync(SkipKey, new SkipDate(date), ct: ct);
+
+    private sealed record SkipDate(DateOnly Date);
 }

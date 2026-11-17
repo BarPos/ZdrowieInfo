@@ -14,7 +14,7 @@ internal static class SecurityHeadersMiddleware
         headers.XContentTypeOptions = "nosniff";
         // Pliki raportu (PDF, .tex) otwiera wbudowana przeglądarka PDF – CSP stron (object-src 'none', sandbox)
         // i X-Frame-Options ją blokują. To nie są strony HTML, więc tych nagłówków nie potrzebują.
-        if (!context.Request.Path.StartsWithSegments("/eksport"))
+        if (!context.Request.Path.StartsWithSegments("/eksport") && !context.Request.Path.StartsWithSegments(Export.ReportFilesEndpoints.SharedPath))
         {
             headers.ContentSecurityPolicy = ContentSecurityPolicy;
             headers.XFrameOptions = "DENY";

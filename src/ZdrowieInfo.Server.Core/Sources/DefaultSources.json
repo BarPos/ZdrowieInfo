@@ -148,7 +148,7 @@
     "slug": "mz-komunikaty",
     "name": "MZ – Komunikaty",
     "url": "https://www.gov.pl/web/zdrowie/komunikaty1",
-    "group": "Weekly",
+    "group": "Daily",
     "method": "List",
     "notes": "Dużo tematów spoza zakresu.",
     "selectors": {
@@ -169,7 +169,7 @@
     "slug": "cez-aktualnosci",
     "name": "CeZ – Aktualności",
     "url": "https://www.cez.gov.pl/pl/page/o-nas/aktualnosci",
-    "group": "Weekly",
+    "group": "Daily",
     "method": "List",
     "notes": null,
     "selectors": {
@@ -191,7 +191,7 @@
     "slug": "nfz-di-komunikaty",
     "name": "NFZ – Komunikaty Departamentu Informatyki",
     "url": "https://www.nfz.gov.pl/dla-swiadczeniodawcy/sprawozdawczosc-elektroniczna/komunikaty-departamentu-informatyki/",
-    "group": "Weekly",
+    "group": "Daily",
     "method": "List",
     "notes": "Pokrywa się z Aktualnościami NFZ (te same URL-e). Blok 10 najnowszych bez stronicowania: przy przepełnieniu lista zapasowa = archiwum Aktualności Centrali (wszystkie tematy).",
     "selectors": {
@@ -214,7 +214,7 @@
     "slug": "nfz-swiad",
     "name": "Komunikat SWIAD",
     "url": "https://www.nfz.gov.pl/dla-swiadczeniodawcy/sprawozdawczosc-elektroniczna/lista-typow-komunikatow-xml/komunikat-swiad/",
-    "group": "Monthly",
+    "group": "Daily",
     "method": "Page",
     "notes": null,
     "selectors": {
@@ -231,7 +231,7 @@
     "slug": "nfz-dekl",
     "name": "Komunikat DEKL",
     "url": "https://www.nfz.gov.pl/dla-swiadczeniodawcy/sprawozdawczosc-elektroniczna/lista-typow-komunikatow-xml/komunikat-dekl/",
-    "group": "Monthly",
+    "group": "Daily",
     "method": "Page",
     "notes": null,
     "selectors": {
@@ -248,7 +248,7 @@
     "slug": "nfz-liocz",
     "name": "Komunikat LIOCZ",
     "url": "https://www.nfz.gov.pl/dla-swiadczeniodawcy/sprawozdawczosc-elektroniczna/lista-typow-komunikatow-xml/komunikat-liocz/",
-    "group": "Monthly",
+    "group": "Daily",
     "method": "Page",
     "notes": null,
     "selectors": {
@@ -265,7 +265,7 @@
     "slug": "nfz-kol",
     "name": "Komunikat KOL",
     "url": "https://www.nfz.gov.pl/dla-swiadczeniodawcy/sprawozdawczosc-elektroniczna/lista-typow-komunikatow-xml/komunikat-kol/",
-    "group": "Monthly",
+    "group": "Daily",
     "method": "Page",
     "notes": null,
     "selectors": {
@@ -282,7 +282,7 @@
     "slug": "nfz-umx",
     "name": "Komunikat UMX",
     "url": "https://www.nfz.gov.pl/dla-swiadczeniodawcy/sprawozdawczosc-elektroniczna/lista-typow-komunikatow-xml/komunikat-umx/",
-    "group": "Monthly",
+    "group": "Daily",
     "method": "Page",
     "notes": "UMX 4.2 od 1.01.2027.",
     "selectors": {
@@ -299,7 +299,7 @@
     "slug": "nfz-simp",
     "name": "Interfejs SIMP",
     "url": "https://www.nfz.gov.pl/dla-swiadczeniodawcy/sprawozdawczosc-elektroniczna/interfejsy-integracyjne/simp/",
-    "group": "Monthly",
+    "group": "Daily",
     "method": "Page",
     "notes": null,
     "selectors": {
@@ -316,7 +316,7 @@
     "slug": "nfz-zbpoz",
     "name": "Komunikat ZBPOZ",
     "url": "https://www.nfz.gov.pl/dla-swiadczeniodawcy/sprawozdawczosc-elektroniczna/lista-typow-komunikatow-xml/komunikat-zbpoz/",
-    "group": "Bimonthly",
+    "group": "Daily",
     "method": "Page",
     "notes": null,
     "selectors": {
@@ -333,7 +333,7 @@
     "slug": "nfz-efaktury",
     "name": "Komunikat e-Faktury",
     "url": "https://www.nfz.gov.pl/dla-swiadczeniodawcy/sprawozdawczosc-elektroniczna/lista-typow-komunikatow-xml/komunikat-e-faktury-e-faktura-e-rachunek/",
-    "group": "Bimonthly",
+    "group": "Daily",
     "method": "Page",
     "notes": null,
     "selectors": {
@@ -350,7 +350,7 @@
     "slug": "nfz-sproz",
     "name": "Komunikat SP_ROZ",
     "url": "https://www.nfz.gov.pl/dla-swiadczeniodawcy/sprawozdawczosc-elektroniczna/lista-typow-komunikatow-xml/komunikat-sproz/",
-    "group": "Bimonthly",
+    "group": "Daily",
     "method": "Page",
     "notes": null,
     "selectors": {
@@ -367,7 +367,7 @@
     "slug": "nfz-dilo",
     "name": "Interfejs DiLO",
     "url": "https://www.nfz.gov.pl/dla-swiadczeniodawcy/sprawozdawczosc-elektroniczna/interfejsy-integracyjne/dilo/",
-    "group": "Bimonthly",
+    "group": "Daily",
     "method": "Page",
     "notes": null,
     "selectors": {
@@ -384,7 +384,7 @@
     "slug": "nfz-ewus",
     "name": "Interfejs eWUŚ",
     "url": "https://www.nfz.gov.pl/dla-swiadczeniodawcy/sprawozdawczosc-elektroniczna/interfejsy-integracyjne/ewus/",
-    "group": "Bimonthly",
+    "group": "Daily",
     "method": "Page",
     "notes": null,
     "selectors": {
@@ -401,7 +401,7 @@
     "slug": "nfz-kolce",
     "name": "Interfejs KOLCE",
     "url": "https://www.nfz.gov.pl/dla-swiadczeniodawcy/sprawozdawczosc-elektroniczna/interfejsy-integracyjne/kolce/",
-    "group": "Bimonthly",
+    "group": "Daily",
     "method": "Page",
     "notes": null,
     "selectors": {
@@ -418,7 +418,7 @@
     "slug": "nfz-opieka-koordynowana",
     "name": "Opieka koordynowana w POZ",
     "url": "https://www.nfz.gov.pl/dla-swiadczeniodawcy/opieka-koordynowana-w-poz/",
-    "group": "Bimonthly",
+    "group": "Daily",
     "method": "Page",
     "notes": null,
     "selectors": {

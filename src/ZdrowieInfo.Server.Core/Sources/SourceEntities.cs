@@ -94,6 +94,12 @@ public sealed class Source
     public string? StatusMessage { get; set; }
     public string? Notes { get; set; }
 
+    /// <summary>
+    /// Do jakiego dnia wstecz przejrzano archiwum listy (raporty wstecz); <see cref="DateOnly.MinValue"/> – cała lista.
+    /// Razem z <see cref="BaselineAt"/> mówi, za które dni znamy wszystkie wpisy źródła.
+    /// </summary>
+    public DateOnly? ArchiveFrom { get; set; }
+
     /// <summary>Pierwsza udana ekstrakcja (stan bazowy). Null = następne udane sprawdzenie zapisze stan bazowy bez wpisów „nowych”.</summary>
     public DateTimeOffset? BaselineAt { get; set; }
     public DateTimeOffset? LastCheckedAt { get; set; }

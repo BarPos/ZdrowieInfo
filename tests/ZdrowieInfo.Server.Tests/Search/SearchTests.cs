@@ -110,4 +110,40 @@ public class SearchTests(PostgresFixture postgres)
         Assert.Contains("Krytyczna podatność FortiGate", text);
         Assert.Contains("Nic nie znaleziono", await browser.TextAsync("/szukaj?q=fortigate&waznosc=niska"));
     }
+
+    [Fact]
+    public async Task Pages_are_disjoint_and_cover_all_hits()
+    {
+        await using var app = await AppFactory.CreateAsync(postgres);
+        await using (var db = await app.DbAsync())
+        {
+            for (var d = 0; d < 30; d++)
+            {
+                var date = new DateOnly(2026, 10, 1).AddDays(d);
+                db.Reports.Add(new Report
+                {
+                    Date = date, Title = $"Raport {d}", Summary = "Podsumowanie.", Producer = "claude", Status = ReportStatus.Ready,
+                    CreatedAt = DateTimeOffset.UtcNow, UpdatedAt = DateTimeOffset.UtcNow,
+                    Findings = [new ReportFinding { Importance = Importance.High, Category = FindingCategory.Outage, Headline = $"Przerwa techniczna nr {d}", Body = "Prace serwisowe." }],
+                });
+            }
+            await db.SaveChangesAsync();
+        }
+        var search = app.Services.GetRequiredService<ReportSearch>();
+
+        var first = await search.SearchPageAsync(new SearchFilters("przerw", Limit: 12));
+        var second = await search.SearchPageAsync(new SearchFilters("przerw", Limit: 12, Offset: 12));
+        var third = await search.SearchPageAsync(new SearchFilters("przerw", Limit: 12, Offset: 24));
+
+        Assert.Equal((12, true), (first.Hits.Count, first.HasMore));
+        Assert.Equal((12, true), (second.Hits.Count, second.HasMore));
+        Assert.Equal((6, false), (third.Hits.Count, third.HasMore));
+        var all = first.Hits.Concat(second.Hits).Concat(third.Hits).Select(h => h.FindingId).ToList();
+        Assert.Equal(30, all.Distinct().Count());
+
+        var browser = await app.SignedInBrowserAsync();
+        var page2 = await browser.TextAsync("/szukaj?q=przerw&strona=2");
+        Assert.Contains("Wyniki 26–30", page2);
+        Assert.Contains("strona 2", page2);
+    }
 }

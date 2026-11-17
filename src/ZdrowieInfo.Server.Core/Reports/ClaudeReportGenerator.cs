@@ -30,7 +30,7 @@ public sealed class ClaudeReportGenerator(ReportSettings settings, IOptions<Repo
             {
                 new() { Text = ReportComposer.SystemPrompt, CacheControl = new BetaCacheControlEphemeral() },
             },
-            Messages = [new BetaUserMessageParam { Content = ReportComposer.BuildUserMessage(request.Date, request.Profile, request.Items, request.PreviousErrors) }],
+            Messages = [new BetaUserMessageParam { Content = ReportComposer.BuildUserMessage(request) }],
             OutputConfig = new BetaOutputConfig
             {
                 Effort = ParseEffort(claude.Effort),

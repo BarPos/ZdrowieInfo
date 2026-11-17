@@ -62,10 +62,10 @@ public sealed class AppFactory(string connectionString, string dataDirectory, Fa
         HandleCookies = true,
     });
 
-    public async Task CreateUserAsync(string login, string password)
+    public async Task CreateUserAsync(string login, string password, ZdrowieInfo.Server.Data.UserRole role = ZdrowieInfo.Server.Data.UserRole.Admin)
     {
         await using var scope = Services.CreateAsyncScope();
-        var result = await scope.ServiceProvider.GetRequiredService<UserAdminService>().CreateUserAsync(login, password);
+        var result = await scope.ServiceProvider.GetRequiredService<UserAdminService>().CreateUserAsync(login, password, role);
         Assert.True(result.Succeeded, string.Join(" ", result.Errors.Select(e => e.Description)));
     }
 }

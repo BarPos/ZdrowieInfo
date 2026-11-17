@@ -11,6 +11,7 @@ public static class ExportServiceCollectionExtensions
         services.AddSingleton<LatexReportRenderer>();
         services.AddSingleton<PdfCompiler>();
         services.AddSingleton<ReportExporter>();
+        services.AddPublicRateLimit();
         return services;
     }
 }

@@ -8,7 +8,10 @@ namespace ZdrowieInfo.Server.Tests.Infrastructure;
 /// <summary>Jeden kontener PostgreSQL na cały przebieg testów; każda fabryka aplikacji dostaje własną bazę.</summary>
 public sealed class PostgresFixture : IAsyncLifetime
 {
-    private readonly PostgreSqlContainer _container = new PostgreSqlBuilder("postgres:16").Build();
+    // Klasy testów działają równolegle, każda aplikacja ma własną pulę połączeń – domyślne 100 to za mało.
+    private readonly PostgreSqlContainer _container = new PostgreSqlBuilder("postgres:16")
+        .WithCommand("-c", "max_connections=500")
+        .Build();
 
     public async ValueTask InitializeAsync() => await _container.StartAsync();
 

@@ -6,7 +6,7 @@ Aplikacja codziennie sprawdza publiczne strony NFZ, CeZ, MZ i CSIRT CeZ, wykrywa
 - Kolejność prac i stan etapów: [Plan implementacji ZdrowieInfo.md](Plan%20implementacji%20ZdrowieInfo.md)
 - Decyzje techniczne: [docs/decyzje.md](docs/decyzje.md)
 
-**Stan:** etapy 1–7 (kod): logowanie z TOTP i passkey, PWA, instalator; 23 źródła z wykrywaniem zmian, incydentami i harmonogramem 5:00; raport dzienny z Claude od 5:30 (walidacja cytatów, ponowienia do 6:20, raport awaryjny), API dla zewnętrznych producentów raportów; powiadomienia push i dziennik incydentów; PDF z LaTeX-a; wyszukiwanie; serwer MCP. Do sprawdzenia na żywo: Claude API (od 18.11.2026) i push na iPhonie.
+**Stan:** etapy 1–7 (kod): logowanie z TOTP i passkey, PWA, instalator; 23 źródła z wykrywaniem zmian, incydentami i harmonogramem 5:00; raport dzienny z Claude od 5:30 (walidacja cytatów, ponowienia do 6:20, raport awaryjny), API dla zewnętrznych producentów raportów; powiadomienia push i dziennik incydentów; PDF z LaTeX-a; wyszukiwanie; serwer MCP; role administrator/użytkownik, raporty wstecz i okresowe, publiczne linki do PDF. Do sprawdzenia na żywo: Claude API (od 18.11.2026) i push na iPhonie.
 
 ## Układ repozytorium
 
@@ -36,7 +36,7 @@ cd src/ZdrowieInfo.Server && dotnet run -- --create-user admin
 cd src/ZdrowieInfo.Server && dotnet run
 ```
 
-Aplikacja: <http://localhost:5180>. Harmonogram źródeł jest lokalnie wyłączony (żeby każde uruchomienie nie odpytywało stron) — źródła sprawdzisz poleceniem `dotnet run -- --check-now` albo w panelu. Przy pierwszym logowaniu poprosi o skonfigurowanie aplikacji uwierzytelniającej. Dane lokalne (klucze Data Protection) trafiają do `.dev-data/` (poza gitem).
+Aplikacja: <http://localhost:5180>. Konto z `--create-user` to administrator. Harmonogram źródeł jest lokalnie wyłączony (żeby każde uruchomienie nie odpytywało stron) — źródła sprawdzisz poleceniem `dotnet run -- --check-now` albo w panelu. Przy pierwszym logowaniu poprosi o skonfigurowanie aplikacji uwierzytelniającej. Dane lokalne (klucze Data Protection) trafiają do `.dev-data/` (poza gitem).
 
 Testy (wymagają działającego Dockera):
 
@@ -82,17 +82,26 @@ cd /opt/zdrowieinfo && sudo -u zdrowieinfo env $(sudo grep -v '^#' /etc/zdrowiei
 | Polecenie | |
 | --- | --- |
 | `--migrate-only` | stosuje migracje i kończy (aplikacja robi to też przy starcie) |
-| `--create-user <login>` | tworzy konto; hasło (min. 12 znaków) z terminala albo ze standardowego wejścia |
+| `--create-user <login> [--role uzytkownik]` | tworzy konto (domyślnie administratora); hasło (min. 12 znaków) z terminala albo ze standardowego wejścia |
 | `--set-password <login>` | nowe hasło, odblokowanie konta; zalogowane urządzenia wylogowane w ciągu 5 minut |
 | `--reset-mfa <login>` | awaryjnie: wyłącza TOTP, usuwa passkey, odblokowuje konto; zalogowane urządzenia wylogowane w ciągu 5 minut |
 | `--check-sources [slug]` | próba selektorów na żywych stronach, bez zapisu |
 | `--check-now [slug]` | sprawdza źródła teraz i zapisuje wynik (jak harmonogram) |
-| `--generate-report [rrrr-mm-dd] [--replace]` | przygotowuje raport dnia teraz (domyślnie dziś) |
-| `--export-report [rrrr-mm-dd]` | generuje .tex i PDF raportu (domyślnie dziś) |
+| `--generate-report [rrrr-mm-dd] [--replace]`, `--generate-report rrrr-mm-dd--rrrr-mm-dd` | raport dnia teraz (domyślnie dziś), raport wstecz albo okresowy od–do (brakujące wpisy pobiera ze stron) |
+| `--export-report [rrrr-mm-dd albo rrrr-mm-dd--rrrr-mm-dd]` | generuje PDF raportu (domyślnie dziś) |
 | `--mark-reported-before rrrr-mm-dd` | przy włączaniu raportów: starsze wpisy nie trafią do pierwszego raportu |
 | `--apply-default-sources [slug]` | przywraca adresy i selektory z listy domyślnej (np. po aktualizacji aplikacji); zmienione źródła dostają nowy stan bazowy |
 
-Rejestracja w aplikacji jest wyłączona.
+Rejestracja w aplikacji jest wyłączona – konta zakłada administrator (**Panel → Użytkownicy**) albo polecenie serwera.
+
+## Konta i role
+
+| Rola | Dostęp |
+| --- | --- |
+| administrator | wszystko: panel (źródła, wpisy, raporty, ustawienia, klucze API, użytkownicy), incydenty, PDF, publiczne linki, usuwanie raportów |
+| użytkownik | czytanie i wyszukiwanie raportów, własne konto (hasło, weryfikacja dwuetapowa, passkey, powiadomienia o raportach) |
+
+Weryfikacja dwuetapowa jest obowiązkowa dla wszystkich. **Panel → Użytkownicy → Usuń 2FA** (np. po zgubieniu telefonu) usuwa aplikację uwierzytelniającą i passkey – przy następnym logowaniu użytkownik skonfiguruje je od nowa.
 
 ## Claude API i raporty
 
@@ -108,13 +117,17 @@ curl -H "Authorization: Bearer mon_…" https://zdrowieinfo.example.pl/api/items
 curl -X POST -H "Authorization: Bearer mon_…" -H "Content-Type: application/json" --data @raport.json "https://zdrowieinfo.example.pl/api/reports?date=2026-11-18"
 ```
 
-Każdy raport ma też wersję PDF (XeLaTeX z szablonu; przycisk „Pobierz PDF” na stronie raportu, adres `/eksport/raport-rrrr-mm-dd.pdf`). Lokalnie potrzebny TeX Live (`xelatex`, `latexmk`); na serwerze instaluje go `install.sh`.
+Każdy raport ma też wersję PDF (XeLaTeX z szablonu; dla administratora przycisk „Pobierz PDF” na stronie raportu, adres `/eksport/raport-rrrr-mm-dd.pdf`). Lokalnie potrzebny TeX Live (`xelatex`, `latexmk`); na serwerze instaluje go `install.sh`.
+
+Administrator może udostępnić PDF raportu publicznym linkiem (`/udostepnione/<losowy token>`, bez logowania): na dole strony raportu **Udostępnij…** – tam też nowy losowy link (stary przestaje działać), wycofanie i usunięcie raportu.
+
+**Panel → Raporty**: raport dzienny za wcześniejszy dzień albo raport okresowy od–do (do 92 dni), z wpisów opublikowanych w tych dniach. Gdy znane wpisy źródła nie sięgają tak daleko, aplikacja przegląda starsze strony list i pobiera treść wpisów (może to potrwać kilka minut; zlecenia działają w tle). Raporty wstecz nie wysyłają powiadomień.
 
 Format raportu (`title`, `summary`, `findings[]` z `importance`, `category`, `headline`, `body`, `action`, `citations[]` z `item_id` i `quote`, `ignored[]`) — [docs/decyzje.md](docs/decyzje.md), D16–D19.
 
 ## Powiadomienia i wyszukiwanie
 
-Powiadomienia włącza się osobno na każdym urządzeniu: **Konto → Powiadomienia** (tam też powiadomienie testowe). Przychodzą, gdy raport jest gotowy, gdy źródło przestaje być dostępne i gdy dostęp wraca; historia w **Incydenty**.
+Powiadomienia włącza się osobno na każdym urządzeniu: **Konto → Powiadomienia** (tam też powiadomienie testowe). Przychodzą, gdy raport jest gotowy; administratorzy dostają też powiadomienia, gdy źródło przestaje być dostępne i gdy dostęp wraca (historia w **Incydenty**). Wszystkie źródła są domyślnie sprawdzane codziennie o 5:00.
 
 **Szukaj** przeszukuje punkty i podsumowania raportów: wielkość liter i polskie znaki bez znaczenia, fragment słowa łapie odmiany („przerw” → przerwa, przerwy), `"fraza"`, `or`, `-słowo`; filtry dat, ważności, kategorii i źródła.
 

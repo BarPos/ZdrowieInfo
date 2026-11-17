@@ -6,14 +6,16 @@ using ZdrowieInfo.Server.Reports;
 
 namespace ZdrowieInfo.Server.Search;
 
+/// <param name="Offset">Ile trafień pominąć (stronicowanie).</param>
+/// <param name="Limit">Ile trafień zwrócić (rozmiar strony).</param>
 public sealed record SearchFilters(string? Query, DateOnly? From = null, DateOnly? To = null, Importance? Importance = null,
-    FindingCategory? Category = null, int? SourceId = null, int Limit = 100);
+    FindingCategory? Category = null, int? SourceId = null, int Limit = 100, int Offset = 0);
 
 public sealed record SearchSource(string Title, string Url, DateOnly? PublishedOn);
 
 /// <summary>Trafienie: punkt raportu (FindingId) albo sam raport (tytuł/podsumowanie). Snippet to bezpieczny HTML z &lt;mark&gt;.</summary>
 public sealed record SearchHit(
-    DateOnly Date,
+    ReportKey Report,
     string ReportTitle,
     ReportStatus Status,
     long? FindingId,
@@ -22,7 +24,12 @@ public sealed record SearchHit(
     string Headline,
     string Text,
     string SnippetHtml,
-    IReadOnlyList<SearchSource> Sources);
+    IReadOnlyList<SearchSource> Sources)
+{
+    public DateOnly Date => Report.End;
+}
+
+public sealed record SearchPage(IReadOnlyList<SearchHit> Hits, bool HasMore);
 
 /// <summary>
 /// Wyszukiwanie w raportach: pełnotekstowe (tsvector, konfiguracja pl_unaccent, websearch_to_tsquery – cudzysłowy, „or”, „-słowo”)
@@ -31,17 +38,30 @@ public sealed record SearchHit(
 /// </summary>
 public sealed class ReportSearch(IDbContextFactory<ZdrowieInfoDbContext> dbFactory)
 {
-    public async Task<IReadOnlyList<SearchHit>> SearchAsync(SearchFilters filters, CancellationToken ct = default)
+    /// <summary>Najdalsze trafienie, do którego da się dojść stronicowaniem.</summary>
+    public const int MaxWindow = 1000;
+
+    public async Task<IReadOnlyList<SearchHit>> SearchAsync(SearchFilters filters, CancellationToken ct = default) =>
+        (await SearchPageAsync(filters, ct)).Hits;
+
+    /// <summary>
+    /// Jedna strona wyników. Kolejność jest stała (ranking, potem dopasowania fragmentów, potem same raporty – każda część
+    /// z jednoznacznym porządkiem), więc strona N to zawsze ten sam wycinek: liczymy pierwsze Offset+Limit+1 trafień i tniemy.
+    /// </summary>
+    public async Task<SearchPage> SearchPageAsync(SearchFilters filters, CancellationToken ct = default)
     {
         var query = filters.Query?.Trim() ?? "";
         var terms = Terms(query);
+        var offset = Math.Clamp(filters.Offset, 0, MaxWindow);
+        var limit = Math.Clamp(filters.Limit, 1, MaxWindow);
+        var window = Math.Min(offset + limit + 1, MaxWindow + 1);
         await using var db = await dbFactory.CreateDbContextAsync(ct);
 
         var findings = from f in db.ReportFindings.AsNoTracking()
                        join r in db.Reports on f.ReportId equals r.Id
                        select new { f, r };
         if (filters.From is { } from) findings = findings.Where(x => x.r.Date >= from);
-        if (filters.To is { } to) findings = findings.Where(x => x.r.Date <= to);
+        if (filters.To is { } to) findings = findings.Where(x => x.r.PeriodStart <= to);
         if (filters.Importance is { } importance) findings = findings.Where(x => x.f.Importance == importance);
         if (filters.Category is { } category) findings = findings.Where(x => x.f.Category == category);
         if (filters.SourceId is { } sourceId)
@@ -54,69 +74,73 @@ public sealed class ReportSearch(IDbContextFactory<ZdrowieInfoDbContext> dbFacto
         }
 
         List<Row> rows;
+        var partial = findings;
+        foreach (var pattern in terms.Select(LikePattern))
+            partial = partial.Where(x => EF.Functions.ILike(EF.Functions.Unaccent(x.f.Headline + " " + x.f.Body + " " + (x.f.Action ?? "")), pattern, "\\"));
+        var fts = findings.Where(x => x.f.SearchVector!.Matches(EF.Functions.WebSearchToTsQuery(ZdrowieInfoDbContext.SearchConfig, query)));
+
         if (query.Length == 0)
         {
-            rows = await findings.OrderByDescending(x => x.r.Date).ThenBy(x => x.f.Order).Take(filters.Limit)
-                .Select(x => new Row(x.r.Date, x.r.Title, x.r.Status, x.f.Id, x.f.Importance, x.f.Category, x.f.Headline, x.f.Body, x.f.Action, 0)).ToListAsync(ct);
+            rows = await findings.OrderByDescending(x => x.r.Date).ThenByDescending(x => x.r.Id).ThenBy(x => x.f.Order).Take(window)
+                .Select(x => new Row(x.r.Kind, x.r.PeriodStart, x.r.Date, x.r.Title, x.r.Status, x.f.Id, x.f.Importance, x.f.Category, x.f.Headline, x.f.Body, x.f.Action)).ToListAsync(ct);
         }
         else
         {
             // 1) pełnotekstowo (ranking), 2) fragmenty słów bez polskich znaków – dopisane za trafieniami pełnotekstowymi.
-            rows = await findings
-                .Where(x => x.f.SearchVector!.Matches(EF.Functions.WebSearchToTsQuery(ZdrowieInfoDbContext.SearchConfig, query)))
+            rows = await fts
                 .OrderByDescending(x => x.f.SearchVector!.Rank(EF.Functions.WebSearchToTsQuery(ZdrowieInfoDbContext.SearchConfig, query)))
-                .ThenByDescending(x => x.r.Date).ThenBy(x => x.f.Order).Take(filters.Limit)
-                .Select(x => new Row(x.r.Date, x.r.Title, x.r.Status, x.f.Id, x.f.Importance, x.f.Category, x.f.Headline, x.f.Body, x.f.Action, 0))
+                .ThenByDescending(x => x.r.Date).ThenByDescending(x => x.r.Id).ThenBy(x => x.f.Order).ThenBy(x => x.f.Id).Take(window)
+                .Select(x => new Row(x.r.Kind, x.r.PeriodStart, x.r.Date, x.r.Title, x.r.Status, x.f.Id, x.f.Importance, x.f.Category, x.f.Headline, x.f.Body, x.f.Action))
                 .ToListAsync(ct);
-            if (terms.Count > 0 && rows.Count < filters.Limit)
+            if (terms.Count > 0 && rows.Count < window)
             {
-                var partial = findings;
-                foreach (var pattern in terms.Select(LikePattern))
-                    partial = partial.Where(x => EF.Functions.ILike(EF.Functions.Unaccent(x.f.Headline + " " + x.f.Body + " " + (x.f.Action ?? "")), pattern, "\\"));
-                var known = rows.Select(r => r.FindingId!.Value).ToList();
-                rows.AddRange(await partial.Where(x => !known.Contains(x.f.Id))
-                    .OrderByDescending(x => x.r.Date).ThenBy(x => x.f.Order).Take(filters.Limit - rows.Count)
-                    .Select(x => new Row(x.r.Date, x.r.Title, x.r.Status, x.f.Id, x.f.Importance, x.f.Category, x.f.Headline, x.f.Body, x.f.Action, 0))
+                rows.AddRange(await partial.Where(x => !fts.Any(y => y.f.Id == x.f.Id))
+                    .OrderByDescending(x => x.r.Date).ThenByDescending(x => x.r.Id).ThenBy(x => x.f.Order).ThenBy(x => x.f.Id).Take(window - rows.Count)
+                    .Select(x => new Row(x.r.Kind, x.r.PeriodStart, x.r.Date, x.r.Title, x.r.Status, x.f.Id, x.f.Importance, x.f.Category, x.f.Headline, x.f.Body, x.f.Action))
                     .ToListAsync(ct));
             }
         }
 
-        // Raporty dopasowane tytułem albo podsumowaniem (np. puste „Brak zmian” albo raport bez analizy) – gdy nie filtrujemy po punktach.
+        // Raporty dopasowane tytułem albo podsumowaniem (np. puste „Brak zmian” albo raport bez analizy) – gdy nie filtrujemy po punktach
+        // i żaden punkt raportu nie pasuje (wtedy raport jest już na liście przez swoje punkty).
         var reportRows = new List<Row>();
-        if (query.Length > 0 && filters.Importance is null && filters.Category is null && filters.SourceId is null)
+        if (query.Length > 0 && filters.Importance is null && filters.Category is null && filters.SourceId is null && rows.Count < window)
         {
-            var reports = db.Reports.AsNoTracking().AsQueryable();
+            var withFindings = fts.Select(x => x.r.Id);
+            if (terms.Count > 0) withFindings = withFindings.Union(partial.Select(x => x.r.Id));
+            var reports = db.Reports.AsNoTracking().Where(r => !withFindings.Contains(r.Id));
             if (filters.From is { } f2) reports = reports.Where(r => r.Date >= f2);
-            if (filters.To is { } t2) reports = reports.Where(r => r.Date <= t2);
-            var matched = await reports.Where(r => r.SearchVector!.Matches(EF.Functions.WebSearchToTsQuery(ZdrowieInfoDbContext.SearchConfig, query)))
-                .OrderByDescending(r => r.Date).Take(20)
-                .Select(r => new Row(r.Date, r.Title, r.Status, null, null, null, r.Title, r.Summary, null, 0)).ToListAsync(ct);
+            if (filters.To is { } t2) reports = reports.Where(r => r.PeriodStart <= t2);
+            var matching = reports.Where(r => r.SearchVector!.Matches(EF.Functions.WebSearchToTsQuery(ZdrowieInfoDbContext.SearchConfig, query)));
             if (terms.Count > 0)
             {
-                var partial = reports;
+                var partialReports = reports;
                 foreach (var pattern in terms.Select(LikePattern))
-                    partial = partial.Where(r => EF.Functions.ILike(EF.Functions.Unaccent(r.Title + " " + r.Summary), pattern, "\\"));
-                matched.AddRange(await partial.OrderByDescending(r => r.Date).Take(20)
-                    .Select(r => new Row(r.Date, r.Title, r.Status, null, null, null, r.Title, r.Summary, null, 0)).ToListAsync(ct));
+                    partialReports = partialReports.Where(r => EF.Functions.ILike(EF.Functions.Unaccent(r.Title + " " + r.Summary), pattern, "\\"));
+                matching = matching.Union(partialReports);
             }
-            reportRows = matched.DistinctBy(r => r.Date).Where(r => rows.All(x => x.Date != r.Date)).ToList();
+            reportRows = await matching.OrderByDescending(r => r.Date).ThenByDescending(r => r.Id).Take(window - rows.Count)
+                .Select(r => new Row(r.Kind, r.PeriodStart, r.Date, r.Title, r.Status, null, null, null, r.Title, r.Summary, null)).ToListAsync(ct);
         }
 
-        var ids = rows.Select(r => r.FindingId!.Value).ToList();
+        var all = rows.Concat(reportRows).ToList();
+        var page = all.Skip(offset).Take(limit).ToList();
+        var ids = page.Where(r => r.FindingId is not null).Select(r => r.FindingId!.Value).ToList();
         var citations = (await db.FindingCitations.AsNoTracking().Where(c => ids.Contains(c.FindingId)).OrderBy(c => c.Id).ToListAsync(ct))
             .ToLookup(c => c.FindingId);
 
-        return rows.Concat(reportRows).Select(r =>
+        var hits = page.Select(r =>
         {
             var text = r.Action is null ? r.Body : $"{r.Body} Do zrobienia: {r.Action}";
-            return new SearchHit(r.Date, r.ReportTitle, r.Status, r.FindingId, r.Importance, r.Category, r.Headline, text,
+            return new SearchHit(new ReportKey(r.Kind, r.PeriodStart, r.Date), r.ReportTitle, r.Status, r.FindingId, r.Importance, r.Category, r.Headline, text,
                 Snippet(r.FindingId is null ? r.Body : r.Headline + " — " + text, terms),
                 r.FindingId is { } id ? citations[id].Select(c => new SearchSource(c.Title, c.Url, c.PublishedOn)).DistinctBy(c => c.Url).ToList() : []);
         }).ToList();
+        return new SearchPage(hits, all.Count > offset + limit && offset + limit < MaxWindow);
     }
 
-    private sealed record Row(DateOnly Date, string ReportTitle, ReportStatus Status, long? FindingId, Importance? Importance,
-        FindingCategory? Category, string Headline, string Body, string? Action, float Rank);
+    private sealed record Row(ReportKind Kind, DateOnly PeriodStart, DateOnly Date, string ReportTitle, ReportStatus Status, long? FindingId,
+        Importance? Importance, FindingCategory? Category, string Headline, string Body, string? Action);
 
     /// <summary>Słowa zapytania bez operatorów (cudzysłowy, „or”, „-słowo”), bez polskich znaków, małymi literami, co najmniej 3 znaki.</summary>
     public static List<string> Terms(string query) =>

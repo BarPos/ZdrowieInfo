@@ -111,7 +111,7 @@ public class McpTests(PostgresFixture postgres)
 
         var report = await CallAsync(client, "get_report", new() { ["date"] = "2026-11-16" });
         Assert.Equal("Raport 16.11", report.GetProperty("title").GetString());
-        Assert.Equal("https://localhost/eksport/raport-2026-11-16.pdf", report.GetProperty("pdf_url").GetString());
+        Assert.Equal("https://localhost/raporty/2026-11-16", report.GetProperty("report_url").GetString());
         var findings = report.GetProperty("findings");
         Assert.Equal("2.1", findings[0].GetProperty("number").GetString());
         Assert.Equal("Zaktualizować do 7.4.3.", findings[0].GetProperty("action").GetString());

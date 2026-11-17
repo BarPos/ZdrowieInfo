@@ -31,11 +31,32 @@ public enum FindingCategory
     Other = 6,
 }
 
-/// <summary>Raport dzienny (tabela <c>reports</c>) – dokładnie jeden na datę.</summary>
+/// <summary>
+/// Raport (tabela <c>reports</c>): dzienny – dokładnie jeden na datę, albo okresowy (od <see cref="PeriodStart"/> do <see cref="Date"/>).
+/// Unikalny (rodzaj, początek, koniec); wyszukiwanie po tożsamości przez <see cref="ReportQueries.WhereKey"/>.
+/// </summary>
 public sealed class Report
 {
     public long Id { get; set; }
+    public ReportKind Kind { get; set; }
+
+    /// <summary>Pierwszy dzień okresu; w raporcie dziennym równy <see cref="Date"/>.</summary>
+    public DateOnly PeriodStart { get; set; }
+
+    /// <summary>Dzień raportu dziennego albo ostatni dzień okresu.</summary>
     public DateOnly Date { get; set; }
+
+    public ReportKey Key => new(Kind, PeriodStart, Date);
+
+    /// <summary>
+    /// Wpisy źródłowe, z których powstał raport. Raport z harmonogramu i API dodatkowo „zabiera” wpisy (source_items.report_id);
+    /// raport wstecz i okresowy tylko je tu zapisuje – wpis może należeć do wielu takich raportów.
+    /// </summary>
+    public List<long> InputItemIds { get; set; } = [];
+
+    /// <summary>Losowy token publicznego linku do PDF (/udostepnione/{token}); null = nieudostępniony.</summary>
+    public string? ShareToken { get; set; }
+    public DateTimeOffset? SharedAt { get; set; }
     public bool IsEmpty { get; set; }
     public ReportStatus Status { get; set; }
     public required string Title { get; set; }

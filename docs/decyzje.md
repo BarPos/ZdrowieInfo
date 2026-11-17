@@ -276,3 +276,49 @@ Strona `/raporty/rrrr-mm-dd` wygląda jak dokument, a nie strona internetowa: ka
 - Klucz API z zakresem `mcp:read` (`Authorization: Bearer mon_…`), limit 60 zapytań/min na klucz jak w `/api`. Bez zakresu 403, bez klucza 401.
 - Narzędzia tylko do odczytu (adnotacja `readOnlyHint`): `search_reports(query, from, to, importance, category, source, limit)` — to samo wyszukiwanie co `/szukaj`, ważność i kategorie po polsku jak w raporcie, źródło po identyfikatorze z `list_sources`; `get_report(date)` — cały raport (bez daty najnowszy) z numerami punktów, cytatami i adresami źródeł, linkiem do raportu i PDF; `list_sources()` — źródła, stan i otwarty incydent. Wyniki jako JSON (snake_case). Złe parametry → błąd narzędzia z listą dozwolonych wartości.
 - Strona błędu (`UseStatusCodePagesWithReExecute`) wyłączona dla `/api`, `/mcp` i `/push`: ponowne wykonanie POST bez klucza na stronie Blazor kończyło się 400 (antiforgery) zamiast 401.
+
+# Decyzje — role, raporty wstecz i okresowe, udostępnianie (17.11.2026)
+
+## D25. Role: administrator i użytkownik
+
+- Kolumna `role` w `AspNetUsers` (0 – użytkownik, 1 – administrator) i claim roli w ciasteczku (`admin` / `uzytkownik`), odświeżany razem z claimem MFA (logowanie, co 5 minut). Polityka `admin` (schemat ciasteczka) na: cały `/panel/*` (atrybut w `Pages/Panel/_Imports.razor`), `/incydenty`, `/eksport/*`, akcje raportu (`POST /raporty/{raport}/…`). Odmowa → `/Account/AccessDenied`. Menu tylko ukrywa linki – o dostępie decyduje serwer.
+- Użytkownik: raporty, wyszukiwanie, własne konto (hasło, TOTP, passkey, powiadomienia o raportach). Bez PDF, udostępniania, incydentów i panelu. Powiadomienia o incydentach idą tylko do administratorów (użytkownik i tak nie otworzy `/incydenty`).
+- Migracja: dotychczasowe konta to administratorzy. `--create-user` domyślnie tworzy administratora (pierwsze konto z `install.sh` musi mieć panel), `--role uzytkownik` – użytkownika.
+- Odebranie roli administratora zmienia security stamp (wylogowanie w ciągu 5 minut, także otwartego panelu); nadanie – nowa rola przy najbliższym odświeżeniu ciasteczka. Zawsze zostaje co najmniej jeden administrator; administrator nie zdegraduje ani nie usunie samego siebie.
+- Klucze API (`/api`, `/mcp`) bez zmian – nie są kontami, zakres klucza decyduje o dostępie.
+
+## D26. Zarządzanie użytkownikami i usunięcie 2FA
+
+- **Panel → Użytkownicy**: nowe konto (login, rola; losowe hasło 16 znaków pokazane raz), nadanie/odebranie administratora, nowe hasło (losowe, pokazane raz; wylogowanie w ciągu 5 minut), odblokowanie, usunięcie (z passkey i subskrypcjami push).
+- „Usuń 2FA” = to samo co `--reset-mfa`: wyłącza TOTP, usuwa klucz i wszystkie passkey, unieważnia sesje. Weryfikacja dwuetapowa pozostaje **obowiązkowa** – przy następnym logowaniu (login + hasło) użytkownik konfiguruje aplikację uwierzytelniającą od nowa (np. po zgubieniu telefonu). Wyłączenie 2FA na stałe dla wybranych kont nie jest dostępne.
+
+## D27. Raporty wstecz i okresowe
+
+- Tożsamość raportu: rodzaj (`Daily`/`Period`), `period_start`, `date` – unikalne razem (`ReportKey`, jedno miejsce wyszukiwania `WhereKey`). W adresach: `2026-11-16` (dzienny) i `2026-11-10--2026-11-16` (okresowy) – strona `/raporty/{…}`, PDF, wyszukiwanie, MCP (`get_report` przyjmuje oba).
+- `Panel → Raporty` albo `--generate-report rrrr-mm-dd[--rrrr-mm-dd] [--replace]`: dziś – jak harmonogram; ponownie dla raportu z harmonogramu – z jego wpisów (raport z przeszłości już nie dobiera nowych wpisów); pozostałe – **raport wstecz** z wpisów opublikowanych w tych dniach (bez daty publikacji – wykrytych w tych dniach). Zlecenia z panelu w kolejce w tle (po jednym, stan na stronie).
+- Brakujące wpisy: od dnia stanu bazowego wszystkie wpisy źródła są znane (zwykłe sprawdzenia, przy przerwach z kolejnymi stronami). Dla wcześniejszych dni źródło-lista jest przeglądane strona po stronie (`NextPage`, potem lista zapasowa) aż do wpisów sprzed początku okresu, najwyżej `MaxArchivePages` = 40 stron; osiągnięty zasięg zapisuje się w źródle (`archive_from`), więc kolejny raport za te dni niczego nie pobiera. Nie dotarcie do daty → uwaga w raporcie i w zleceniu. Najstarszy znany wpis nie jest miarą pokrycia (przypięty stary artykuł udawałby pełne archiwum).
+- Najpierw liczba wpisów, potem pobieranie ich treści – za szeroki okres jest odrzucany bez pobierania artykułów. Wpisy z archiwum zapisywane jako zastane (`is_baseline`) – nie trafiają do raportów dziennych; stan źródła, incydenty i ostatnie sprawdzenie bez zmian. Potem treść wpisów z okresu (także zastanych). Strony „cała strona” nie mają archiwum.
+- Raport wstecz i okresowy nie „zabiera” wpisów (`source_items.report_id`) – zapisuje je w `input_item_ids` (wpis może być w raporcie dziennym i kilku okresowych). Nowe raporty z harmonogramu i API też zapisują `input_item_ids`.
+- Bez powiadomienia push (także ponowne przygotowanie raportu dziennego z przeszłości), bez „stanu źródeł” (dzisiejszy stan w raporcie z przeszłości byłby mylący). Prompt dostaje kontekst: raport wstecz albo okres od–do (tytuł z okresem, terminy od ostatniego dnia okresu).
+- Limity: okres do 92 dni, najwyżej 150 wpisów w jednym raporcie (każdy trzeba rozliczyć w jednej odpowiedzi modelu) – powyżej odmowa z prośbą o krótszy okres. Data z przyszłości – odmowa.
+
+## D28. Usuwanie raportu
+
+- Administrator: strona raportu („Usuń raport”) albo Panel → Raporty. Usuwa raport, pliki PDF/.tex i publiczny link. Wpisy zostają zaraportowane (`reported_at`), więc nie wracają hurtem do najbliższego raportu dziennego; raport można przygotować ponownie (wstecz).
+- Usunięcie dzisiejszego raportu dziennego: harmonogram tego dnia go nie odtwarza (`reports.skip_date`) – ponownie tylko ręcznie.
+
+## D29. Publiczny link do PDF
+
+- `/udostepnione/{token}`: 32 losowe bajty (base64url, 43 znaki), bez logowania. Token w bazie wprost (administrator musi móc go znów zobaczyć i skopiować), indeks unikalny. „Nowy losowy link” unieważnia poprzedni, „Wycofaj” – link przestaje działać. Ponowne przygotowanie raportu zachowuje link; usunięcie – kasuje.
+- Odpowiedź: PDF inline, `Cache-Control: no-store`, `X-Robots-Tag: noindex, nofollow`, `Referrer-Policy: no-referrer`, bez CSP stron (jak `/eksport`); nieznany i wycofany link – ten sam 404. Limit 20 pobrań na minutę z adresu IP; kompilacja PDF na żądanie po kolei (jedna naraz). Service worker nie zapisuje `/udostepnione` ani `/eksport`.
+- Pobieranie `.tex` usunięte (przycisk i adres); plik `.tex` powstaje tylko do kompilacji PDF (`--export-report`).
+
+## D30. Stronicowanie
+
+- Lista raportów (30 na stronę), wyszukiwanie (25), incydenty (50): parametr `?strona=N`, pozostałe filtry zostają w linkach; strony statyczne bez JavaScriptu. Panel (wpisy, uruchomienia, raporty): stronicowanie po stronie serwera (MudDataGrid `ServerData`).
+- Wyszukiwanie ma stałą kolejność (ranking + rozstrzyganie remisów, potem dopasowania fragmentów słów, potem trafienia w samych raportach – tylko raporty bez pasującego punktu), więc strona N to zawsze ten sam wycinek; dalej niż 1000. trafienie się nie przechodzi (zawężanie filtrami).
+
+## D31. Źródła codziennie
+
+Domyślnie wszystkie 23 źródła sprawdzane codziennie o 5:00 (lista domyślna i migracja istniejących). Częstotliwość pojedynczego źródła nadal można zmienić w panelu; zmiana grupy nie zmienia stanu bazowego. 17 źródeł na www.nfz.gov.pl z odstępem 2–3 s – lista w ok. minutę (plus treść nowych wpisów), przed raportem o 5:30.
+

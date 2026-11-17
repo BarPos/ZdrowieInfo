@@ -353,6 +353,10 @@ namespace ZdrowieInfo.Server.Data.Migrations
                         .HasColumnType("boolean")
                         .HasColumnName("phone_number_confirmed");
 
+                    b.Property<int>("Role")
+                        .HasColumnType("integer")
+                        .HasColumnName("role");
+
                     b.Property<string>("SecurityStamp")
                         .HasColumnType("text")
                         .HasColumnName("security_stamp");
@@ -531,9 +535,20 @@ namespace ZdrowieInfo.Server.Data.Migrations
                         .HasColumnType("integer")
                         .HasColumnName("generation_attempts");
 
+                    b.PrimitiveCollection<List<long>>("InputItemIds")
+                        .IsRequired()
+                        .HasColumnType("bigint[]")
+                        .HasColumnName("input_item_ids");
+
                     b.Property<bool>("IsEmpty")
                         .HasColumnType("boolean")
                         .HasColumnName("is_empty");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("kind");
 
                     b.Property<string>("Model")
                         .HasMaxLength(100)
@@ -547,6 +562,10 @@ namespace ZdrowieInfo.Server.Data.Migrations
                     b.Property<string>("PdfPath")
                         .HasColumnType("text")
                         .HasColumnName("pdf_path");
+
+                    b.Property<DateOnly>("PeriodStart")
+                        .HasColumnType("date")
+                        .HasColumnName("period_start");
 
                     b.Property<string>("Producer")
                         .IsRequired()
@@ -563,6 +582,15 @@ namespace ZdrowieInfo.Server.Data.Migrations
                         .HasColumnType("tsvector")
                         .HasColumnName("search_vector")
                         .HasComputedColumnSql("setweight(to_tsvector('pl_unaccent'::regconfig, coalesce(title, '')), 'A') || setweight(to_tsvector('pl_unaccent'::regconfig, coalesce(summary, '')), 'B')", true);
+
+                    b.Property<string>("ShareToken")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("share_token");
+
+                    b.Property<DateTimeOffset?>("SharedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("shared_at");
 
                     b.Property<string>("SourcesState")
                         .IsRequired()
@@ -603,13 +631,20 @@ namespace ZdrowieInfo.Server.Data.Migrations
                         .HasName("pk_reports");
 
                     b.HasIndex("Date")
-                        .IsUnique()
                         .HasDatabaseName("ix_reports_date");
 
                     b.HasIndex("SearchVector")
                         .HasDatabaseName("ix_reports_search_vector");
 
                     NpgsqlIndexBuilderExtensions.HasMethod(b.HasIndex("SearchVector"), "GIN");
+
+                    b.HasIndex("ShareToken")
+                        .IsUnique()
+                        .HasDatabaseName("ix_reports_share_token");
+
+                    b.HasIndex("Kind", "PeriodStart", "Date")
+                        .IsUnique()
+                        .HasDatabaseName("ix_reports_kind_period_start_date");
 
                     b.ToTable("reports", (string)null);
                 });
@@ -749,6 +784,10 @@ namespace ZdrowieInfo.Server.Data.Migrations
                         .HasColumnName("id");
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<DateOnly?>("ArchiveFrom")
+                        .HasColumnType("date")
+                        .HasColumnName("archive_from");
 
                     b.Property<DateTimeOffset?>("BaselineAt")
                         .HasColumnType("timestamp with time zone")

@@ -1,49 +1,74 @@
+using System.Threading.RateLimiting;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
+using ZdrowieInfo.Server.Accounts;
 using ZdrowieInfo.Server.Data;
+using ZdrowieInfo.Server.Reports;
 
 namespace ZdrowieInfo.Server.Export;
 
-/// <summary>Pobieranie dokumentu raportu (dla zalogowanego użytkownika). Brakujący plik jest generowany na żądanie.</summary>
+/// <summary>
+/// PDF raportu: dla administratora (/eksport/raport-{slug}.pdf) i pod publicznym linkiem (/udostepnione/{token}) dla każdego,
+/// kto zna losowy token. Brakujący plik jest generowany na żądanie (kompilacje po kolei).
+/// </summary>
 public static class ReportFilesEndpoints
 {
-    public static RouteGroupBuilder MapReportFiles(this IEndpointRouteBuilder endpoints)
-    {
-        var files = endpoints.MapGroup("/eksport").RequireAuthorization();
+    public const string SharedPath = "/udostepnione";
+    public const string PublicRateLimitPolicy = "public";
 
-        files.MapGet("/raport-{date}.pdf", (string date, IDbContextFactory<ZdrowieInfoDbContext> db, ReportExporter exporter, HttpContext http, CancellationToken ct) =>
-            ServeAsync(date, pdf: true, db, exporter, http, ct));
-        files.MapGet("/raport-{date}.tex", (string date, IDbContextFactory<ZdrowieInfoDbContext> db, ReportExporter exporter, HttpContext http, CancellationToken ct) =>
-            ServeAsync(date, pdf: false, db, exporter, http, ct));
-        return files;
+    /// <summary>Limit dla publicznych linków: 20 pobrań na minutę z jednego adresu IP.</summary>
+    public static IServiceCollection AddPublicRateLimit(this IServiceCollection services) =>
+        services.AddRateLimiter(o => o.AddPolicy(PublicRateLimitPolicy, context => RateLimitPartition.GetFixedWindowLimiter(
+            context.Connection.RemoteIpAddress?.ToString() ?? "anon",
+            _ => new FixedWindowRateLimiterOptions { PermitLimit = 20, Window = TimeSpan.FromMinutes(1), QueueLimit = 0 })));
+
+    public static IEndpointRouteBuilder MapReportFiles(this IEndpointRouteBuilder endpoints)
+    {
+        endpoints.MapGet("/eksport/raport-{slug}.pdf", async (string slug, IDbContextFactory<ZdrowieInfoDbContext> dbFactory, ReportExporter exporter,
+                HttpContext http, CancellationToken ct) =>
+            {
+                if (!ReportKey.TryParse(slug, out var key)) return Results.NotFound();
+                await using var db = await dbFactory.CreateDbContextAsync(ct);
+                var report = await db.Reports.AsNoTracking().WhereKey(key).Select(r => new { r.PdfPath }).SingleOrDefaultAsync(ct);
+                if (report is null) return Results.NotFound();
+                http.Response.Headers.CacheControl = "private, no-cache";
+                return await ServeAsync(key, report.PdfPath, exporter, http, ct);
+            })
+            .RequireAuthorization(AppRoles.AdminPolicy);
+
+        endpoints.MapGet(SharedPath + "/{token}", async (string token, IDbContextFactory<ZdrowieInfoDbContext> dbFactory, ReportExporter exporter,
+                HttpContext http, CancellationToken ct) =>
+            {
+                http.Response.Headers["X-Robots-Tag"] = "noindex, nofollow";
+                http.Response.Headers["Referrer-Policy"] = "no-referrer";
+                http.Response.Headers.CacheControl = "no-store";
+                // Ten sam wynik dla nieznanego i wycofanego linku.
+                if (token.Length is < 20 or > 64) return Results.NotFound();
+                await using var db = await dbFactory.CreateDbContextAsync(ct);
+                var report = await db.Reports.AsNoTracking().Where(r => r.ShareToken == token)
+                    .Select(r => new { r.Kind, r.PeriodStart, r.Date, r.PdfPath }).SingleOrDefaultAsync(ct);
+                if (report is null) return Results.NotFound();
+                return await ServeAsync(new ReportKey(report.Kind, report.PeriodStart, report.Date), report.PdfPath, exporter, http, ct);
+            })
+            .AllowAnonymous()
+            .RequireRateLimiting(PublicRateLimitPolicy);
+        return endpoints;
     }
 
-    private static async Task<IResult> ServeAsync(string date, bool pdf, IDbContextFactory<ZdrowieInfoDbContext> dbFactory, ReportExporter exporter, HttpContext http, CancellationToken ct)
+    private static async Task<IResult> ServeAsync(ReportKey key, string? path, ReportExporter exporter, HttpContext http, CancellationToken ct)
     {
-        if (!DateOnly.TryParseExact(date, "yyyy-MM-dd", out var day)) return Results.NotFound();
-
-        string? path;
-        await using (var db = await dbFactory.CreateDbContextAsync(ct))
-        {
-            var report = await db.Reports.AsNoTracking().Where(r => r.Date == day).Select(r => new { r.PdfPath, r.TexPath }).SingleOrDefaultAsync(ct);
-            if (report is null) return Results.NotFound();
-            path = pdf ? report.PdfPath : report.TexPath;
-        }
-
         if (path is null || !File.Exists(path))
         {
-            var result = await exporter.ExportAsync(day, ct);
-            path = pdf ? result.PdfPath : result.TexPath;
+            var result = await exporter.ExportAsync(key, ct);
+            path = result.PdfPath;
             if (path is null)
-                return Results.Text($"Nie udało się wygenerować PDF raportu: {result.Error}", "text/plain; charset=utf-8", statusCode: StatusCodes.Status503ServiceUnavailable);
+                return Results.Text("Nie udało się wygenerować PDF raportu – spróbuj później.", "text/plain; charset=utf-8", statusCode: StatusCodes.Status503ServiceUnavailable);
         }
-
-        var name = $"ZdrowieInfo-raport-{day:yyyy-MM-dd}.{(pdf ? "pdf" : "tex")}";
-        // PDF otwierany w przeglądarce (inline), .tex jako plik do pobrania.
-        http.Response.Headers.ContentDisposition = $"{(pdf ? "inline" : "attachment")}; filename=\"{name}\"";
-        http.Response.Headers.CacheControl = "private, no-cache";
-        return Results.File(path, pdf ? "application/pdf" : "application/x-tex; charset=utf-8");
+        http.Response.Headers.ContentDisposition = $"inline; filename=\"ZdrowieInfo-raport-{key.Slug}.pdf\"";
+        return Results.File(path, "application/pdf");
     }
 }

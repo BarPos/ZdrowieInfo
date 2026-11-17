@@ -32,7 +32,8 @@ internal static class CliRunner
         switch (command.Kind)
         {
             case CliCommandKind.CreateUser:
-                result = await admin.CreateUserAsync(login, ReadNewPassword());
+                ZdrowieInfo.Server.Accounts.AppRoles.TryParse(command.Role ?? ZdrowieInfo.Server.Accounts.AppRoles.Admin, out var role);
+                result = await admin.CreateUserAsync(login, ReadNewPassword(), role);
                 break;
             case CliCommandKind.SetPassword:
                 result = await SetPasswordAsync(scope.ServiceProvider, login, ReadNewPassword());
@@ -52,7 +53,7 @@ internal static class CliRunner
 
         Console.WriteLine(command.Kind switch
         {
-            CliCommandKind.CreateUser => $"Utworzono konto {login}. Przy pierwszym logowaniu aplikacja poprosi o konfigurację aplikacji uwierzytelniającej.",
+            CliCommandKind.CreateUser => $"Utworzono konto {login} ({(command.Role is null ? "administrator" : command.Role)}). Przy pierwszym logowaniu aplikacja poprosi o konfigurację aplikacji uwierzytelniającej.",
             CliCommandKind.SetPassword => $"Ustawiono nowe hasło dla {login}. Zalogowane urządzenia zostaną wylogowane w ciągu 5 minut.",
             _ => $"Wyłączono TOTP i passkey dla {login}; zalogowane urządzenia zostaną wylogowane w ciągu 5 minut. Przy następnym logowaniu skonfiguruj aplikację uwierzytelniającą ponownie.",
         });

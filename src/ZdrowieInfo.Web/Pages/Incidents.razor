@@ -1,4 +1,5 @@
 @page "/incydenty"
+@attribute [Authorize(Policy = ZdrowieInfo.Server.Accounts.AppRoles.AdminPolicy)]
 @using Microsoft.EntityFrameworkCore
 @using ZdrowieInfo.Server.Common
 @using ZdrowieInfo.Server.Data
@@ -51,6 +52,7 @@ else
                 }
             </tbody>
         </table>
+        <Pager Page="page" HasMore="page < totalPages" TotalPages="totalPages" />
     </div>
 }
 
@@ -58,6 +60,11 @@ else
     [SupplyParameterFromQuery(Name = "zrodlo")] private int? Zrodlo { get; set; }
     [SupplyParameterFromQuery(Name = "od")] private string? Od { get; set; }
     [SupplyParameterFromQuery(Name = "do")] private string? Do { get; set; }
+    [SupplyParameterFromQuery(Name = Pager.Parameter)] private int? Strona { get; set; }
+
+    private const int PageSize = 50;
+    private int page = 1;
+    private int totalPages = 1;
 
     private sealed record Row(SourceIncident Incident, string Name, string Url);
     private sealed record SourceOption(int Id, string Name);
@@ -78,7 +85,10 @@ else
         if (Zrodlo is { } id) query = query.Where(x => x.i.SourceId == id);
         if (DateOnly.TryParse(Od, out var from)) { var f = Utc(from); query = query.Where(x => (x.i.EndedAt ?? now) >= f); }
         if (DateOnly.TryParse(Do, out var to)) { var t = Utc(to.AddDays(1)); query = query.Where(x => x.i.StartedAt < t); }
-        rows = (await query.OrderByDescending(x => x.i.StartedAt).Take(500).ToListAsync()).Select(x => new Row(x.i, x.Name, x.Url)).ToList();
+        page = Pager.Normalize(Strona);
+        totalPages = Math.Max(1, (await query.CountAsync() + PageSize - 1) / PageSize);
+        rows = (await query.OrderByDescending(x => x.i.StartedAt).ThenByDescending(x => x.i.Id).Skip((page - 1) * PageSize).Take(PageSize).ToListAsync())
+            .Select(x => new Row(x.i, x.Name, x.Url)).ToList();
     }
 
     private static DateTimeOffset Utc(DateOnly date)

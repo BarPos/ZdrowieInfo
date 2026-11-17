@@ -13,6 +13,9 @@ namespace ZdrowieInfo.Server.Sources.Checking;
 
 public sealed record CheckRunResult(long RunId, int SourcesChecked, int SourcesFailed, int NewItems);
 
+/// <summary>Wynik pobrania archiwum list (raport wstecz): ile źródeł przejrzano, ile wpisów dodano, co się nie udało.</summary>
+public sealed record ArchiveResult(int SourcesFetched, int ItemsAdded, IReadOnlyList<string> Warnings);
+
 /// <summary>
 /// Sprawdzenie źródeł: pobranie, ekstrakcja, porównanie z bazą, stan bazowy, treść nowych wpisów, incydenty.
 /// Zmiany wykrywa kod – Claude dostaje (w etapie 3) tylko to, co tu zapisano jako nowe.
@@ -342,12 +345,160 @@ public sealed class SourceCheckService(
         return new Outcome(true, 1, ItemsFound: 1, ContentHash: hash);
     }
 
-    private async Task FetchDetailsAsync(ZdrowieInfoDbContext db, Source source, ConcurrentDictionary<string, string?> details, CancellationToken ct)
+    /// <summary>
+    /// Raport wstecz i okresowy: dla każdego aktywnego źródła-listy, którego wpisów od <paramref name="from"/> jeszcze nie znamy
+    /// (dzień sprzed stanu bazowego i sprzed dotychczas przejrzanego archiwum), przechodzi kolejne strony listy (NextPage, potem
+    /// lista zapasowa), aż dojdzie do wpisów sprzed tej daty. Zasięg zapisuje w źródle – następny raz bez pobierania.
+    /// Nowe wpisy zapisuje jako zastane (IsBaseline) – nie trafiają do raportów dziennych, tylko do raportów za dni, w których
+    /// je opublikowano. Nie zmienia stanu źródła ani incydentów. Strony „cała strona” nie mają archiwum.
+    /// </summary>
+    public async Task<ArchiveResult> EnsureArchiveAsync(DateOnly from, CancellationToken ct = default)
     {
-        var pending = await db.SourceItems
-            .Where(i => i.SourceId == source.Id && i.Kind == SourceItemKind.Entry && !i.IsBaseline && i.DetailFetchedAt == null && i.DetailAttempts < 3)
+        await _runLock.WaitAsync(ct);
+        try
+        {
+            await using var db = await dbFactory.CreateDbContextAsync(ct);
+            var sources = await db.Sources.AsNoTracking().Where(s => s.IsActive && s.Method == SourceMethod.List).OrderBy(s => s.Name).ToListAsync(ct);
+
+            var warnings = new List<string>();
+            int fetched = 0, added = 0;
+            foreach (var source in sources)
+            {
+                // Od stanu bazowego zwykłe sprawdzenia widzą każdy nowy wpis (przy przerwach – przechodzą kolejne strony),
+                // a wcześniejsze dni – tylko jeśli archiwum już przejrzano. Najstarszy znany wpis nie wystarcza
+                // (przypięty stary artykuł na pierwszej stronie udawałby pełne pokrycie).
+                var since = source.BaselineAt is { } baseline ? DateOnly.FromDateTime(WarsawClock.ToLocal(baseline)) : (DateOnly?)null;
+                if (since <= from || source.ArchiveFrom <= from) continue;
+                fetched++;
+                var (count, reached, warning) = await WalkArchiveAsync(db, source, from, ct);
+                added += count;
+                if (warning is not null) warnings.Add($"{source.Name}: {warning}");
+                if (reached is { } r && (source.ArchiveFrom is null || r < source.ArchiveFrom))
+                    await db.Sources.Where(s => s.Id == source.Id).ExecuteUpdateAsync(u => u.SetProperty(s => s.ArchiveFrom, r), ct);
+            }
+            if (fetched > 0)
+                logger.LogInformation("Archiwum od {From}: {Sources} źródeł, {Added} wpisów, {Warnings} ostrzeżeń.", from, fetched, added, warnings.Count);
+            return new ArchiveResult(fetched, added, warnings);
+        }
+        finally
+        {
+            _runLock.Release();
+        }
+    }
+
+    /// <returns>Dodane wpisy, do jakiego dnia lista jest pełna (null – nie dotarto) i ostrzeżenie.</returns>
+    private async Task<(int Added, DateOnly? Reached, string? Warning)> WalkArchiveAsync(ZdrowieInfoDbContext db, Source source, DateOnly from, CancellationToken ct)
+    {
+        DateOnly? reached = null;
+        var max = Math.Max(1, options.Value.MaxArchivePages);
+        var found = new Dictionary<string, ExtractedItem>();
+        var url = source.Url;
+        var overflow = false;
+        string? warning = null;
+        for (var page = 1; ; page++)
+        {
+            var fetch = await fetcher.FetchAsync(url, ct: ct);
+            if (!fetch.Success || fetch.Html is null)
+            {
+                warning = $"nie udało się pobrać {page}. strony listy ({fetch.Message}).";
+                break;
+            }
+            ListExtraction extraction;
+            try
+            {
+                extraction = SourceExtractor.ExtractList(fetch.Html, url, source.Selectors);
+            }
+            catch (SelectorException e)
+            {
+                warning = $"{page}. strona listy: {e.Message}";
+                break;
+            }
+            var dated = extraction.Items.Where(i => i.PublishedOn is not null).ToList();
+            if (dated.Count == 0)
+            {
+                warning = "wpisy na liście nie mają dat – nie da się sięgnąć wstecz.";
+                break;
+            }
+            foreach (var item in dated)
+                if (item.PublishedOn >= from) found.TryAdd(item.Key, item);
+            if (dated.Min(i => i.PublishedOn!.Value) < from)
+            {
+                reached = from;
+                break;
+            }
+
+            var next = extraction.NextPageUrl;
+            if (next is null && !overflow && source.Selectors.OverflowUrl is { } overflowUrl)
+            {
+                next = overflowUrl;
+                overflow = true;
+            }
+            if (next is null)
+            {
+                reached = DateOnly.MinValue; // koniec listy – starszych wpisów na stronie nie ma
+                break;
+            }
+            if (page >= max)
+            {
+                warning = $"przejrzano {page} stron listy i nie dotarto do {from:dd.MM.yyyy} (limit MaxArchivePages).";
+                break;
+            }
+            url = next;
+        }
+
+        var keys = found.Keys.ToList();
+        var known = (await db.SourceItems.Where(i => i.SourceId == source.Id && keys.Contains(i.Key)).Select(i => i.Key).ToListAsync(ct)).ToHashSet();
+        var now = time.GetUtcNow();
+        var added = 0;
+        foreach (var item in found.Values.Where(i => !known.Contains(i.Key)))
+        {
+            db.SourceItems.Add(new SourceItem
+            {
+                SourceId = source.Id,
+                Kind = SourceItemKind.Entry,
+                Key = item.Key,
+                Url = item.Url,
+                Title = item.Title,
+                PublishedOn = item.PublishedOn,
+                Summary = item.Summary,
+                IsBaseline = true,
+                FirstSeenAt = now,
+                LastChangedAt = now,
+            });
+            added++;
+        }
+        await db.SaveChangesAsync(ct);
+        db.ChangeTracker.Clear();
+        return (added, reached, warning);
+    }
+
+    /// <summary>Treść wskazanych wpisów (raport wstecz i okresowy) – także zastanych, których zwykłe sprawdzenie nie pobiera.</summary>
+    public async Task FetchContentAsync(IReadOnlyCollection<long> itemIds, CancellationToken ct = default)
+    {
+        await _runLock.WaitAsync(ct);
+        try
+        {
+            await using var db = await dbFactory.CreateDbContextAsync(ct);
+            var sourceIds = await db.SourceItems.Where(i => itemIds.Contains(i.Id) && i.Kind == SourceItemKind.Entry && i.DetailFetchedAt == null && i.DetailAttempts < 3)
+                .Select(i => i.SourceId).Distinct().ToListAsync(ct);
+            var details = new ConcurrentDictionary<string, string?>();
+            foreach (var source in await db.Sources.Where(s => sourceIds.Contains(s.Id)).ToListAsync(ct))
+                await FetchDetailsAsync(db, source, details, ct, itemIds);
+        }
+        finally
+        {
+            _runLock.Release();
+        }
+    }
+
+    private async Task FetchDetailsAsync(ZdrowieInfoDbContext db, Source source, ConcurrentDictionary<string, string?> details, CancellationToken ct,
+        IReadOnlyCollection<long>? onlyIds = null)
+    {
+        var query = db.SourceItems.Where(i => i.SourceId == source.Id && i.Kind == SourceItemKind.Entry && i.DetailFetchedAt == null && i.DetailAttempts < 3);
+        query = onlyIds is null ? query.Where(i => !i.IsBaseline) : query.Where(i => onlyIds.Contains(i.Id));
+        var pending = await query
             .OrderBy(i => i.FirstSeenAt)
-            .Take(options.Value.MaxDetailFetchesPerSource)
+            .Take(onlyIds is null ? options.Value.MaxDetailFetchesPerSource : int.MaxValue)
             .ToListAsync(ct);
 
         foreach (var item in pending)

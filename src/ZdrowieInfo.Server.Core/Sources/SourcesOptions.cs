@@ -27,6 +27,9 @@ public sealed class SourcesOptions
     /// <summary>Ile stron listy (łącznie z pierwszą i zapasową) przejrzeć w jednym sprawdzeniu, zanim pojawi się ostrzeżenie.</summary>
     public int MaxListPages { get; set; } = 10;
 
+    /// <summary>Raport wstecz: ile stron listy jednego źródła przejrzeć, szukając wpisów z wcześniejszych dni.</summary>
+    public int MaxArchivePages { get; set; } = 40;
+
     public TimeSpan RetryDelay { get; set; } = TimeSpan.FromMinutes(5);
     public int FailuresBeforeIncident { get; set; } = 3;
     public TimeSpan IncidentRecheckInterval { get; set; } = TimeSpan.FromHours(1);

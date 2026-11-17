@@ -56,6 +56,12 @@ public static class AccountsServiceCollectionExtensions
         // (jeden użytkownik – częste sprawdzanie nic nie kosztuje).
         services.Configure<SecurityStampValidatorOptions>(o => o.ValidationInterval = SessionRevalidationInterval);
 
+        services.AddAuthorizationBuilder()
+            .AddPolicy(AppRoles.AdminPolicy, p => p
+                .AddAuthenticationSchemes(IdentityConstants.ApplicationScheme)
+                .RequireAuthenticatedUser()
+                .RequireRole(AppRoles.Admin));
+
         services.AddScoped<UserAdminService>();
         return services;
     }

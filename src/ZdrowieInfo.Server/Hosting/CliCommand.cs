@@ -2,20 +2,20 @@ namespace ZdrowieInfo.Server.Hosting;
 
 internal enum CliCommandKind { Run, MigrateOnly, CreateUser, SetPassword, ResetMfa, CheckSources, CheckNow, ApplyDefaultSources, GenerateReport, MarkReportedBefore, ExportReport, Invalid }
 
-internal sealed record CliCommand(CliCommandKind Kind, string? Login = null, string? Error = null, bool Replace = false)
+internal sealed record CliCommand(CliCommandKind Kind, string? Login = null, string? Error = null, bool Replace = false, string? Role = null)
 {
     public const string Usage = """
         Użycie:
           ZdrowieInfo.Server                         uruchamia aplikację
           ZdrowieInfo.Server --migrate-only          stosuje migracje bazy i kończy
-          ZdrowieInfo.Server --create-user <login>   tworzy konto (hasło ze standardowego wejścia)
+          ZdrowieInfo.Server --create-user <login> [--role uzytkownik]  tworzy konto, domyślnie administratora (hasło ze standardowego wejścia)
           ZdrowieInfo.Server --set-password <login>  ustawia nowe hasło i unieważnia sesje
           ZdrowieInfo.Server --reset-mfa <login>     awaryjnie wyłącza TOTP i passkey, odblokowuje konto
           ZdrowieInfo.Server --check-sources [slug]  próba selektorów na żywo, bez zapisu (wszystkie albo jedno źródło)
           ZdrowieInfo.Server --check-now [slug]      sprawdza źródła teraz i zapisuje wynik (jak harmonogram)
           ZdrowieInfo.Server --apply-default-sources [slug]  przywraca adresy i selektory z listy domyślnej (nowy stan bazowy)
-          ZdrowieInfo.Server --generate-report [rrrr-mm-dd] [--replace]  przygotowuje raport dnia (domyślnie dziś)
-          ZdrowieInfo.Server --export-report [rrrr-mm-dd]  generuje .tex i PDF raportu (domyślnie dziś)
+          ZdrowieInfo.Server --generate-report [rrrr-mm-dd | rrrr-mm-dd--rrrr-mm-dd] [--replace]  raport dnia (domyślnie dziś), wstecz albo okresowy
+          ZdrowieInfo.Server --export-report [rrrr-mm-dd | rrrr-mm-dd--rrrr-mm-dd]  generuje PDF raportu (domyślnie dziś)
           ZdrowieInfo.Server --mark-reported-before rrrr-mm-dd  oznacza wcześniejsze wpisy jako zaraportowane (start raportów)
         """;
 
@@ -68,11 +68,22 @@ internal sealed record CliCommand(CliCommandKind Kind, string? Login = null, str
             {
                 continue;
             }
+            else if (args[i] == "--role")
+            {
+                i++; // wartość czyta --create-user
+                continue;
+            }
             else if (WithLogin.TryGetValue(args[i], out var kind))
             {
                 if (i + 1 >= args.Length || args[i + 1].StartsWith("--", StringComparison.Ordinal))
                     return new CliCommand(CliCommandKind.Invalid, Error: $"{args[i]} wymaga loginu.");
                 current = new CliCommand(kind, args[++i]);
+                if (kind == CliCommandKind.CreateUser && Array.IndexOf(args, "--role") is var r and >= 0)
+                {
+                    if (r + 1 >= args.Length || !Accounts.AppRoles.TryParse(args[r + 1], out _))
+                        return new CliCommand(CliCommandKind.Invalid, Error: "--role wymaga wartości admin albo uzytkownik.");
+                    current = current with { Role = args[r + 1] };
+                }
             }
 
             if (current is null) continue;

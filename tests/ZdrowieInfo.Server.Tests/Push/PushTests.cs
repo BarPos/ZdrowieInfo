@@ -192,4 +192,27 @@ public class PushTests(PostgresFixture postgres)
         Assert.Contains("3 h", all);
         Assert.Contains("Brak incydentów", await browser.TextAsync("/incydenty?od=2026-11-15"));
     }
+
+    [Fact]
+    public async Task Incident_pushes_go_to_admins_only_but_reports_to_everyone()
+    {
+        var (app, push) = await StartAsync(postgres);
+        await using var _app = app;
+        await app.CreateUserAsync("szef", "Test-Password-1234");
+        await app.CreateUserAsync("czytelnik", "Test-Password-1234", UserRole.User);
+        await using (var db = await app.DbAsync())
+        {
+            foreach (var user in await db.Users.ToListAsync())
+                db.PushSubscriptions.Add(new PushSubscriptionRecord { UserId = user.Id, Endpoint = $"https://push.example/{user.UserName}", P256dh = "p", Auth = "a", Origin = "https://localhost", CreatedAt = DateTimeOffset.UtcNow });
+            var source = await db.Sources.SingleAsync(s => s.Slug == "nfz-mazowsze");
+            var now = DateTimeOffset.UtcNow;
+            db.SourceIncidents.Add(new SourceIncident { SourceId = source.Id, StartedAt = now.AddMinutes(-15), LastAttemptAt = now, Attempts = 3, ErrorType = CheckErrorType.Http, Details = "HTTP 503" });
+            await db.SaveChangesAsync();
+        }
+        await app.Services.GetRequiredService<NotificationDispatcher>().DispatchPendingAsync();
+        Assert.Equal(["https://push.example/szef"], push.Sent.Select(s => s.Endpoint).ToArray());
+
+        await app.Services.GetRequiredService<ZdrowieInfo.Server.Reports.DailyReportService>().GenerateAsync(DateOnly.FromDateTime(DateTime.Now));
+        Assert.Equal(2, push.Sent.Count(s => s.Message.Url.StartsWith("/raporty/")));
+    }
 }

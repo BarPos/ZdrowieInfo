@@ -64,8 +64,10 @@ public sealed class ReportTools(
             results = hits.Select(h => new
             {
                 date = h.Date,
+                period_start = h.Report.Kind == ReportKind.Period ? h.Report.Start : (DateOnly?)null,
+                report = h.Report.Slug,
                 report_title = h.ReportTitle,
-                report_url = ReportUrl(h.Date),
+                report_url = ReportUrl(h.Report),
                 kind = h.FindingId is null ? "raport" : "punkt",
                 importance = h.Importance is { } hi ? ReportVocabulary.Label(hi) : null,
                 category = h.Category is { } hc ? ReportVocabulary.Label(hc) : null,
@@ -77,22 +79,33 @@ public sealed class ReportTools(
     }
 
     [McpServerTool(Name = "get_report", Title = "Raport dnia", ReadOnly = true, Idempotent = true, OpenWorld = false)]
-    [Description("Pełny raport dzienny ZdrowieInfo: podsumowanie, punkty (ważność, kategoria, opis, co zrobić) z cytatami i adresami źródeł, " +
-                 "pominięte wpisy, problemy ze źródłami. Bez daty – najnowszy raport.")]
+    [Description("Pełny raport ZdrowieInfo: podsumowanie, punkty (ważność, kategoria, opis, co zrobić) z cytatami i adresami źródeł, " +
+                 "pominięte wpisy, problemy ze źródłami. Raport dzienny po dacie, okresowy po identyfikatorze „od--do” (pole report " +
+                 "z search_reports). Bez daty – najnowszy raport dzienny.")]
     public async Task<string> GetReport(
-        [Description("Dzień raportu (rrrr-mm-dd). Puste – najnowszy.")] string? date = null,
+        [Description("Dzień raportu (rrrr-mm-dd) albo okres raportu okresowego (rrrr-mm-dd--rrrr-mm-dd). Puste – najnowszy raport dzienny.")] string? date = null,
         CancellationToken ct = default)
     {
-        var day = ParseDate(date, nameof(date));
+        ReportKey key;
         await using var db = await dbFactory.CreateDbContextAsync(ct);
-        day ??= await db.Reports.OrderByDescending(r => r.Date).Select(r => (DateOnly?)r.Date).FirstOrDefaultAsync(ct)
-                ?? throw new McpException("Nie ma jeszcze żadnego raportu.");
-        var view = await ReportView.LoadAsync(db, day.Value, ct)
-                   ?? throw new McpException($"Brak raportu z dnia {day:yyyy-MM-dd}.");
+        if (string.IsNullOrWhiteSpace(date))
+        {
+            var latest = await db.Reports.Daily().OrderByDescending(r => r.Date).Select(r => (DateOnly?)r.Date).FirstOrDefaultAsync(ct)
+                         ?? throw new McpException("Nie ma jeszcze żadnego raportu.");
+            key = ReportKey.Daily(latest);
+        }
+        else if (!ReportKey.TryParse(date.Trim(), out key))
+        {
+            throw new McpException($"Parametr date: oczekiwana data rrrr-mm-dd albo okres rrrr-mm-dd--rrrr-mm-dd, otrzymano „{date}”.");
+        }
+        var view = await ReportView.LoadAsync(db, key, ct)
+                   ?? throw new McpException(key.Kind == ReportKind.Daily ? $"Brak raportu z dnia {key.Slug}." : $"Brak raportu za okres {key.Label}.");
 
         return Json(new
         {
             date = view.Report.Date,
+            period_start = view.Report.Kind == ReportKind.Period ? view.Report.PeriodStart : (DateOnly?)null,
+            kind = view.KindLabel,
             title = view.Report.Title,
             summary = view.Report.Summary,
             status = view.Report.Status switch
@@ -103,8 +116,7 @@ public sealed class ReportTools(
             },
             status_note = view.StatusNote,
             producer = view.ProducerLabel,
-            report_url = ReportUrl(view.Report.Date),
-            pdf_url = Url($"/eksport/raport-{view.Report.Date:yyyy-MM-dd}.pdf"),
+            report_url = ReportUrl(view.Report.Key),
             findings = view.Groups.SelectMany(g => g.Findings).Select(f => new
             {
                 number = f.Number,
@@ -125,8 +137,8 @@ public sealed class ReportTools(
             ignored = view.Ignored.Select(i => new { title = i.Title, url = i.Url, reason = i.Reason }),
             source_problems = view.SourceProblems.Select(s => new { name = s.Name, ok = s.Ok, problem = s.Problem, warning = s.Warning, incident_open = s.IncidentOpen }),
             sources_checked = view.SourcesChecked,
-            previous_report = view.PreviousDay,
-            next_report = view.NextDay,
+            previous_report = view.Previous?.Slug,
+            next_report = view.Next?.Slug,
         });
     }
 
@@ -185,7 +197,7 @@ public sealed class ReportTools(
             : throw new McpException($"Parametr {name}: oczekiwana data w formacie rrrr-mm-dd, otrzymano „{value}”.");
     }
 
-    private string ReportUrl(DateOnly date) => Url($"/raporty/{date:yyyy-MM-dd}");
+    private string ReportUrl(ReportKey key) => Url($"/raporty/{key.Slug}");
 
     private string Url(string path) => options.Value.PublicUrl.TrimEnd('/') + path;
 

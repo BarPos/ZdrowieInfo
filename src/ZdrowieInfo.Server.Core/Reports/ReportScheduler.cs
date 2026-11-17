@@ -30,7 +30,7 @@ public sealed class ReportScheduler(
 
         await using (var db = await dbFactory.CreateDbContextAsync(ct))
         {
-            if (await db.Reports.AnyAsync(r => r.Date == today, ct)) return null;
+            if (await db.Reports.WhereKey(ReportKey.Daily(today)).AnyAsync(ct)) return null;
 
             if (clock < o.WaitForChecksUntil)
             {
@@ -39,6 +39,9 @@ public sealed class ReportScheduler(
                 if (plan.Baseline.Count > 0 || plan.Scheduled.Count > 0 || retrying) return null;
             }
         }
+
+        // Administrator usunął dzisiejszy raport – harmonogram go nie odtwarza (można przygotować go ręcznie w panelu).
+        if (await settings.GetSkipDateAsync(ct) == today) return null;
 
         var attempts = await settings.GetAttemptsAsync(ct);
         var triedToday = attempts is not null && attempts.Date == today;

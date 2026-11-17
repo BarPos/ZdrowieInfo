@@ -3,12 +3,15 @@
 @using ZdrowieInfo.Server.Common
 @using ZdrowieInfo.Server.Data
 @using ZdrowieInfo.Server.Reports
+@using ZdrowieInfo.Server.Accounts
+@using Microsoft.Extensions.Options
 @inject IDbContextFactory<ZdrowieInfoDbContext> DbFactory
+@inject IOptions<ZdrowieInfoOptions> AppOptions
 
 @if (view is null)
 {
     <PageTitle>Nie ma raportu – ZdrowieInfo</PageTitle>
-    <h1>Nie ma raportu na ten dzień</h1>
+    <h1>Nie ma takiego raportu</h1>
     <p><a href="">Wróć do listy raportów</a>.</p>
 }
 else
@@ -19,26 +22,31 @@ else
 
     <nav class="doc-toolbar" aria-label="Nawigacja raportu">
         <span class="doc-pager">
-            @if (view.PreviousDay is { } prev) { <a href="raporty/@prev.ToString("yyyy-MM-dd")" title="Poprzedni raport">← @prev.ToString("d.MM")</a> }
+            @if (view.Previous is { } prev) { <a href="raporty/@prev.Slug" title="Poprzedni raport">← @ShortLabel(prev)</a> }
             <a href="">Wszystkie</a>
-            @if (view.NextDay is { } next) { <a href="raporty/@next.ToString("yyyy-MM-dd")" title="Następny raport">@next.ToString("d.MM") →</a> }
+            @if (view.Next is { } next) { <a href="raporty/@next.Slug" title="Następny raport">@ShortLabel(next) →</a> }
         </span>
-        <span class="doc-downloads">
-            <a class="btn btn-primary" href="eksport/raport-@(r.Date.ToString("yyyy-MM-dd")).pdf" target="_blank" rel="noopener" data-enhance-nav="false">Pobierz PDF</a>
-            <a class="btn" href="eksport/raport-@(r.Date.ToString("yyyy-MM-dd")).tex" data-enhance-nav="false" download>.tex</a>
-        </span>
+        <AuthorizeView Policy="@AppRoles.AdminPolicy" Context="admin">
+            <span class="doc-downloads">
+                <a class="btn btn-primary" href="eksport/raport-@(r.Key.Slug).pdf" target="_blank" rel="noopener" data-enhance-nav="false">Pobierz PDF</a>
+                <a class="btn" href="raporty/@(r.Key.Slug)#udostepnianie" data-enhance-nav="false">Udostępnij…</a>
+            </span>
+        </AuthorizeView>
     </nav>
 
     <article class="doc">
         <header class="doc-head">
-            <p class="doc-kicker">ZdrowieInfo · raport dzienny</p>
+            <p class="doc-kicker">ZdrowieInfo · @view.KindLabel</p>
             <h1>@r.Title</h1>
             <p class="doc-date">@view.DateLong</p>
             <table class="doc-meta">
                 <tr><th>Przygotował</th><td>@view.ProducerLabel</td></tr>
                 <tr><th>Punkty</th><td>@r.Findings.Count@(Critical > 0 ? $" (krytyczne: {Critical})" : "")</td></tr>
                 <tr><th>Wpisy źródłowe</th><td>@view.Entries.Count</td></tr>
+                @if (view.HasSourcesState)
+                {
                 <tr><th>Źródła</th><td>sprawdzone w tym dniu @view.SourcesChecked z @r.SourcesState.Count@(view.SourceProblems.Count > 0 ? $", z uwagami: {view.SourceProblems.Count}" : "")</td></tr>
+                }
             </table>
             @if (view.StatusNote is not null)
             {
@@ -71,7 +79,7 @@ else
                             @foreach (var c in f.Citations)
                             {
                                 <blockquote class="doc-quote @(c.Citation.Verified ? "" : "unverified")">
-                                    „@c.Citation.Quote”<sup class="doc-fn"><a href="raporty/@Day#przypis-@c.Footnote" id="odwolanie-@c.Footnote" data-enhance-nav="false">@c.Footnote</a></sup>
+                                    „@c.Citation.Quote”<sup class="doc-fn"><a href="raporty/@view.Report.Key.Slug#przypis-@c.Footnote" id="odwolanie-@c.Footnote" data-enhance-nav="false">@c.Footnote</a></sup>
                                 </blockquote>
                             }
                         </div>
@@ -110,6 +118,8 @@ else
             </section>
         }
 
+        @if (view.HasSourcesState)
+        {
         <section>
             <h2><span class="doc-num">@(++section).</span> Stan źródeł</h2>
             @if (view.SourceProblems.Count == 0)
@@ -131,6 +141,7 @@ else
                 <p class="doc-muted">@line</p>
             }
         </section>
+        }
 
         @if (r.Status != ReportStatus.AiError && view.Entries.Count > 0)
         {
@@ -155,7 +166,7 @@ else
                         <li id="przypis-@n.Number">
                             @n.Title@(n.PublishedOn is { } d ? $", {d:dd.MM.yyyy}" : "")@(n.Verified ? "" : " (cytat niezweryfikowany)").
                             @if (!string.IsNullOrEmpty(n.Url)) { <a href="@n.Url" target="_blank" rel="noopener">@n.Url</a> }
-                            <a href="raporty/@Day#odwolanie-@n.Number" class="doc-back" aria-label="Wróć do cytatu" data-enhance-nav="false">↩</a>
+                            <a href="raporty/@view.Report.Key.Slug#odwolanie-@n.Number" class="doc-back" aria-label="Wróć do cytatu" data-enhance-nav="false">↩</a>
                         </li>
                     }
                 </ol>
@@ -168,10 +179,45 @@ else
             @if (r.PdfError is not null) { <br /><span class="doc-muted">PDF: ostatnia kompilacja nieudana – zostanie ponowiona przy pobraniu.</span> }
         </footer>
     </article>
+
+    <AuthorizeView Policy="@AppRoles.AdminPolicy" Context="admin">
+        <section class="card doc-admin" id="udostepnianie">
+            <h2>Udostępnianie i zarządzanie</h2>
+            @if (LinkStatus is { } status)
+            {
+                <p class="notice">@(status switch { "udostepniono" => "Link utworzony.", "nowy-link" => "Utworzono nowy link – poprzedni już nie działa.", "wycofano" => "Udostępnienie wycofane – link już nie działa.", _ => "" })</p>
+            }
+            @if (r.ShareToken is { } token)
+            {
+                var url = $"{AppOptions.Value.PublicUrl.TrimEnd('/')}/udostepnione/{token}";
+                <p>PDF raportu jest dostępny pod publicznym linkiem (bez logowania, dla każdego, kto go zna) od @WarsawClock.ToLocal(r.SharedAt!.Value).ToString("dd.MM.yyyy HH:mm"):</p>
+                <p><input class="share-link" type="text" readonly value="@url" aria-label="Publiczny link do PDF" onfocus="this.select()" /></p>
+                <div class="actions">
+                    <form method="post" action="raporty/@(r.Key.Slug)/nowy-link" data-enhance="false"><AntiforgeryToken /><button type="submit" class="btn">Nowy losowy link</button></form>
+                    <form method="post" action="raporty/@(r.Key.Slug)/wycofaj" data-enhance="false"><AntiforgeryToken /><button type="submit" class="btn">Wycofaj udostępnienie</button></form>
+                </div>
+            }
+            else
+            {
+                <p>Raport nie jest udostępniony. Publiczny link pozwala otworzyć PDF raportu bez logowania; można go w każdej chwili wycofać albo zastąpić nowym.</p>
+                <form method="post" action="raporty/@(r.Key.Slug)/udostepnij" data-enhance="false"><AntiforgeryToken /><button type="submit" class="btn btn-primary">Utwórz publiczny link do PDF</button></form>
+            }
+            <details class="danger-zone">
+                <summary>Usuń raport</summary>
+                <p>Raport, jego PDF i publiczny link zostaną usunięte. Wpisy źródłowe zostają (nie wrócą do raportu dziennego).
+                    @if (r.Kind == ReportKind.Daily) { <text>Raport można przygotować ponownie w <a href="panel/raporty" data-enhance-nav="false">Panel → Raporty</a>.</text> }</p>
+                <form method="post" action="raporty/@(r.Key.Slug)/usun" data-enhance="false"><AntiforgeryToken /><button type="submit" class="btn btn-danger">Usuń raport @r.Key.Label</button></form>
+            </details>
+        </section>
+    </AuthorizeView>
 }
 
 @code {
     [Parameter] public string Day { get; set; } = "";
+
+    [SupplyParameterFromQuery(Name = "link")] private string? LinkStatus { get; set; }
+
+    private static string ShortLabel(ReportKey key) => key.Kind == ReportKind.Daily ? key.End.ToString("d.MM") : key.Label;
 
     private ReportView? view;
 
@@ -180,8 +226,8 @@ else
     protected override async Task OnParametersSetAsync()
     {
         view = null;
-        if (!DateOnly.TryParseExact(Day, "yyyy-MM-dd", out var date)) return;
+        if (!ReportKey.TryParse(Day, out var key)) return;
         await using var db = await DbFactory.CreateDbContextAsync();
-        view = await ReportView.LoadAsync(db, date);
+        view = await ReportView.LoadAsync(db, key);
     }
 }

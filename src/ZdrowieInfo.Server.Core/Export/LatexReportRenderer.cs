@@ -46,6 +46,7 @@ public sealed class LatexReportRenderer(IOptions<ExportOptions> options, TimePro
         model["title"] = report.Title;
         model["summary"] = report.Summary;
         model["date_long"] = view.DateLong;
+        model["kind_label"] = view.KindLabel;
         model["date_short"] = report.Date.ToString("dd.MM.yyyy");
         model["producer"] = view.ProducerLabel;
         model["status_note"] = view.StatusNote;

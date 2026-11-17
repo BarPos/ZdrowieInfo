@@ -4,15 +4,20 @@ using ZdrowieInfo.Server.Data;
 
 namespace ZdrowieInfo.Server.Push;
 
-/// <summary>Wysyła powiadomienie na wszystkie zarejestrowane urządzenia; subskrypcje, które zwróciły 404/410, usuwa.</summary>
+/// <summary>
+/// Wysyła powiadomienie na zarejestrowane urządzenia (wszystkie, jednego użytkownika albo tylko administratorów);
+/// subskrypcje, które zwróciły 404/410, usuwa.
+/// </summary>
 public sealed class PushNotifier(IDbContextFactory<ZdrowieInfoDbContext> dbFactory, IPushSender sender, VapidKeyManager vapid, TimeProvider time, ILogger<PushNotifier> logger)
 {
     /// <returns>Na ile urządzeń wysłano.</returns>
-    public async Task<int> SendAsync(PushMessage message, string? userId = null, CancellationToken ct = default)
+    public async Task<int> SendAsync(PushMessage message, string? userId = null, CancellationToken ct = default, bool adminsOnly = false)
     {
         var keys = await vapid.GetAsync(ct);
         await using var db = await dbFactory.CreateDbContextAsync(ct);
-        var subscriptions = await db.PushSubscriptions.Where(s => userId == null || s.UserId == userId).ToListAsync(ct);
+        var query = db.PushSubscriptions.Where(s => userId == null || s.UserId == userId);
+        if (adminsOnly) query = query.Where(s => db.Users.Any(u => u.Id == s.UserId && u.Role == UserRole.Admin));
+        var subscriptions = await query.ToListAsync(ct);
         var sent = 0;
         foreach (var subscription in subscriptions)
         {

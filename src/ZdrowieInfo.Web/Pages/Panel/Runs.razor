@@ -9,7 +9,7 @@
 
 <AdminShell>
     <MudText Typo="Typo.h4" Class="mb-4">Uruchomienia</MudText>
-    <MudDataGrid T="CheckRun" Items="runs" Dense="true" Hover="true" Loading="runs is null" RowClick="@(e => Toggle(e.Item))">
+    <MudDataGrid T="CheckRun" ServerData="LoadServerData" Dense="true" Hover="true" RowClick="@(e => Toggle(e.Item))">
         <Columns>
             <PropertyColumn Property="r => Labels.Time(r.StartedAt)" Title="Start" />
             <PropertyColumn Property="r => Labels.Of(r.Kind)" Title="Rodzaj" />
@@ -44,21 +44,26 @@
                 </MudSimpleTable>
             }
         </ChildRowContent>
+        <PagerContent>
+            <MudDataGridPager T="CheckRun" PageSizeOptions="[25, 50, 100]" RowsPerPageString="Wierszy na stronę:" />
+        </PagerContent>
     </MudDataGrid>
-    <MudText Typo="Typo.caption" Class="mt-2 d-block">Kliknij wiersz, żeby zobaczyć wynik dla każdego źródła. Widoczne ostatnie 100 uruchomień.</MudText>
+    <MudText Typo="Typo.caption" Class="mt-2 d-block">Kliknij wiersz, żeby zobaczyć wynik dla każdego źródła.</MudText>
 </AdminShell>
 
 @code {
     private sealed record Detail(SourceSnapshot Snapshot, string Name);
 
-    private List<CheckRun>? runs;
     private long? expanded;
     private List<Detail> details = [];
 
-    protected override async Task OnInitializedAsync()
+    private async Task<GridData<CheckRun>> LoadServerData(GridState<CheckRun> state, CancellationToken ct)
     {
-        await using var db = await DbFactory.CreateDbContextAsync();
-        runs = await db.CheckRuns.AsNoTracking().OrderByDescending(r => r.StartedAt).Take(100).ToListAsync();
+        await using var db = await DbFactory.CreateDbContextAsync(ct);
+        var total = await db.CheckRuns.CountAsync(ct);
+        var page = await db.CheckRuns.AsNoTracking().OrderByDescending(r => r.StartedAt).ThenByDescending(r => r.Id)
+            .Skip(state.Page * state.PageSize).Take(state.PageSize).ToListAsync(ct);
+        return new GridData<CheckRun> { TotalItems = total, Items = page };
     }
 
     private static string GroupsText(CheckRun r) => string.Join(", ", r.Groups.Select(Labels.Of));

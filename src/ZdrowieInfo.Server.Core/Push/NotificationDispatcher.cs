@@ -44,14 +44,14 @@ public sealed class NotificationDispatcher(IDbContextFactory<ZdrowieInfoDbContex
                     // Incydent, który zdążył się zamknąć, zanim poszło powiadomienie, dostaje jedno powiadomienie o przywróceniu.
                     if (incident.EndedAt is null && incident.LastAttemptAt >= fresh)
                         await notifier.SendAsync(new PushMessage($"Brak dostępu do źródła: {x.Name}",
-                            $"{Describe(incident.ErrorType)} – {incident.Details}", "/incydenty", $"incydent-{incident.Id}"), ct: ct);
+                            $"{Describe(incident.ErrorType)} – {incident.Details}", "/incydenty", $"incydent-{incident.Id}"), ct: ct, adminsOnly: true);
                     incident.FailurePushSent = true;
                 }
                 if (incident.EndedAt is { } ended && !incident.RecoveryPushSent)
                 {
                     if (ended >= fresh)
                         await notifier.SendAsync(new PushMessage($"Dostęp przywrócony: {x.Name}",
-                            $"Przerwa trwała {Duration(ended - incident.StartedAt)} ({Describe(incident.ErrorType)}).", "/incydenty", $"incydent-{incident.Id}"), ct: ct);
+                            $"Przerwa trwała {Duration(ended - incident.StartedAt)} ({Describe(incident.ErrorType)}).", "/incydenty", $"incydent-{incident.Id}"), ct: ct, adminsOnly: true);
                     incident.RecoveryPushSent = true;
                 }
                 await db.SaveChangesAsync(ct);

@@ -11,7 +11,11 @@
     <input type="search" name="q" placeholder="Szukaj w raportach…" aria-label="Szukaj w raportach" />
     <button type="submit" class="btn">Szukaj</button>
 </form>
-@if (rows.Count == 0)
+@if (!string.IsNullOrEmpty(Deleted))
+{
+    <p class="notice">Usunięto raport @Deleted.</p>
+}
+@if (rows.Count == 0 && page == 1)
 {
     <section class="card">
         <p>Nie ma jeszcze raportów. Pierwszy powstanie jutro rano (przed 6:30), po pierwszym sprawdzeniu źródeł.</p>
@@ -23,10 +27,11 @@ else
         @foreach (var r in rows)
         {
             <li>
-                <a href="raporty/@r.Date.ToString("yyyy-MM-dd")" class="report-row @(r.IsEmpty ? "empty" : "")">
-                    <span class="report-date">@r.Date.ToString("ddd d.MM")</span>
+                <a href="raporty/@r.Key.Slug" class="report-row @(r.IsEmpty ? "empty" : "")">
+                    <span class="report-date">@(r.Key.Kind == ReportKind.Daily ? r.Key.End.ToString("ddd d.MM") : r.Key.Label)</span>
                     <span class="report-title">@r.Title</span>
                     <span class="report-badges">
+                        @if (r.Key.Kind == ReportKind.Period) { <span class="badge muted">okresowy</span> }
                         @if (r.Critical > 0) { <span class="badge critical">@r.Critical krytyczne</span> }
                         @if (r.High > 0) { <span class="badge high">@r.High wysokie</span> }
                         @if (r.Status == ReportStatus.NeedsReview) { <span class="badge warn">do weryfikacji</span> }
@@ -38,23 +43,40 @@ else
             </li>
         }
     </ul>
+    <Pager Page="page" HasMore="hasMore" TotalPages="totalPages" />
 }
 
 @code {
-    private sealed record Row(DateOnly Date, string Title, bool IsEmpty, ReportStatus Status, int Critical, int High, int SourceProblems);
+    private const int PageSize = 30;
+
+    private sealed record Row(ReportKey Key, string Title, bool IsEmpty, ReportStatus Status, int Critical, int High, int SourceProblems);
+
+    [SupplyParameterFromQuery(Name = Pager.Parameter)] private int? Strona { get; set; }
+    [SupplyParameterFromQuery(Name = "usunieto")] private string? Deleted { get; set; }
 
     private List<Row> rows = [];
+    private int page = 1;
+    private bool hasMore;
+    private int totalPages;
 
-    protected override async Task OnInitializedAsync()
+    protected override async Task OnParametersSetAsync()
     {
+        page = Pager.Normalize(Strona);
         await using var db = await DbFactory.CreateDbContextAsync();
-        var reports = await db.Reports.AsNoTracking().OrderByDescending(r => r.Date).Take(90)
+        var total = await db.Reports.CountAsync();
+        totalPages = Math.Max(1, (total + PageSize - 1) / PageSize);
+        // Najnowsze na górze; raport okresowy według ostatniego dnia okresu, za dziennym z tego dnia.
+        var reports = await db.Reports.AsNoTracking()
+            .OrderByDescending(r => r.Date).ThenBy(r => r.Kind).ThenByDescending(r => r.PeriodStart)
+            .Skip((page - 1) * PageSize).Take(PageSize)
             .Select(r => new
             {
-                r.Date, r.Title, r.IsEmpty, r.Status, r.SourcesState,
+                r.Kind, r.PeriodStart, r.Date, r.Title, r.IsEmpty, r.Status, r.SourcesState,
                 Critical = r.Findings.Count(f => f.Importance == Importance.Critical),
                 High = r.Findings.Count(f => f.Importance == Importance.High),
             }).ToListAsync();
-        rows = reports.Select(r => new Row(r.Date, r.Title, r.IsEmpty, r.Status, r.Critical, r.High, r.SourcesState.Count(s => !s.Ok || s.Warning != null))).ToList();
+        rows = reports.Select(r => new Row(new ReportKey(r.Kind, r.PeriodStart, r.Date), r.Title, r.IsEmpty, r.Status, r.Critical, r.High,
+            r.SourcesState.Count(s => !s.Ok || s.Warning != null))).ToList();
+        hasMore = page < totalPages;
     }
 }

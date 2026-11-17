@@ -1,0 +1,171 @@
+@page "/panel/uzytkownicy"
+@rendermode InteractiveServer
+@using System.Security.Claims
+@using Microsoft.AspNetCore.Identity
+@using ZdrowieInfo.Server.Accounts
+@using ZdrowieInfo.Server.Data
+@inject IServiceScopeFactory Scopes
+@inject AuthenticationStateProvider AuthState
+@inject ISnackbar Snackbar
+@inject IDialogService Dialogs
+
+<PageTitle>Użytkownicy – ZdrowieInfo</PageTitle>
+
+<AdminShell>
+    <MudText Typo="Typo.h4" Class="mb-2">Użytkownicy</MudText>
+    <MudText Typo="Typo.body2" Class="mb-4">
+        <b>Administrator</b> ma dostęp do wszystkiego (panel, źródła, incydenty, PDF i udostępnianie, użytkownicy).
+        <b>Użytkownik</b> czyta i przeszukuje raporty oraz zarządza swoim kontem (hasło, weryfikacja dwuetapowa, passkey,
+        powiadomienia o raportach). Weryfikacja dwuetapowa jest obowiązkowa dla wszystkich – po <i>Usuń 2FA</i> użytkownik
+        skonfiguruje ją od nowa przy następnym logowaniu (np. po zgubieniu telefonu).
+    </MudText>
+
+    <MudPaper Class="pa-4 mb-4" Elevation="1">
+        <MudText Typo="Typo.h6" Class="mb-2">Nowe konto</MudText>
+        <MudStack Row="true" Spacing="3" AlignItems="AlignItems.Center" Wrap="Wrap.Wrap">
+            <MudTextField T="string" @bind-Value="login" Label="Login" Style="min-width:220px" Immediate="true" />
+            <MudSelect T="UserRole" @bind-Value="role" Label="Rola" Style="min-width:180px">
+                <MudSelectItem Value="UserRole.User">użytkownik</MudSelectItem>
+                <MudSelectItem Value="UserRole.Admin">administrator</MudSelectItem>
+            </MudSelect>
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" Disabled="string.IsNullOrWhiteSpace(login) || busy" OnClick="Create">Utwórz</MudButton>
+        </MudStack>
+    </MudPaper>
+
+    @if (password is not null)
+    {
+        <MudAlert Severity="Severity.Success" Class="mb-4" ShowCloseIcon="true" CloseIconClicked="() => password = null">
+            Hasło dla <b>@password.Value.Login</b> pokazujemy tylko teraz – przekaż je bezpiecznie. Po zalogowaniu użytkownik
+            skonfiguruje aplikację uwierzytelniającą i może zmienić hasło w <i>Konto → Hasło</i>.<br />
+            <code class="key-plain">@password.Value.Password</code>
+        </MudAlert>
+    }
+
+    <MudSimpleTable Dense="true" Hover="true">
+        <thead><tr><th>Login</th><th>Rola</th><th>2FA</th><th>Passkey</th><th>Stan</th><th>Utworzone</th><th></th></tr></thead>
+        <tbody>
+            @foreach (var u in users)
+            {
+                var self = u.Id == currentUserId;
+                <tr>
+                    <td>@u.Login@(self ? " (Ty)" : "")</td>
+                    <td>@AppRoles.Label(u.Role)</td>
+                    <td>@(u.TwoFactorEnabled ? "włączona" : "do konfiguracji")</td>
+                    <td>@u.Passkeys</td>
+                    <td>@(u.LockedOut ? "zablokowane" : "aktywne")</td>
+                    <td>@Labels.Time(u.CreatedAt)</td>
+                    <td>
+                        <MudStack Row="true" Spacing="1" Wrap="Wrap.Wrap">
+                            @if (u.Role == UserRole.User)
+                            {
+                                <MudButton Size="Size.Small" Disabled="busy" OnClick="() => SetRole(u, UserRole.Admin)">Nadaj administratora</MudButton>
+                            }
+                            else if (!self)
+                            {
+                                <MudButton Size="Size.Small" Disabled="busy" OnClick="() => SetRole(u, UserRole.User)">Odbierz administratora</MudButton>
+                            }
+                            <MudButton Size="Size.Small" Disabled="busy" OnClick="() => ResetPassword(u)">Nowe hasło</MudButton>
+                            @if (u.TwoFactorEnabled || u.Passkeys > 0)
+                            {
+                                <MudButton Size="Size.Small" Color="Color.Warning" Disabled="busy" OnClick="() => ResetMfa(u)">Usuń 2FA</MudButton>
+                            }
+                            @if (u.LockedOut)
+                            {
+                                <MudButton Size="Size.Small" Disabled="busy" OnClick="() => Unlock(u)">Odblokuj</MudButton>
+                            }
+                            @if (!self)
+                            {
+                                <MudButton Size="Size.Small" Color="Color.Error" Disabled="busy" OnClick="() => Delete(u)">Usuń</MudButton>
+                            }
+                        </MudStack>
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </MudSimpleTable>
+</AdminShell>
+
+@code {
+    private IReadOnlyList<UserSummary> users = [];
+    private string? currentUserId;
+    private string? login;
+    private UserRole role = UserRole.User;
+    private bool busy;
+    private (string Login, string Password)? password;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var state = await AuthState.GetAuthenticationStateAsync();
+        currentUserId = state.User.FindFirstValue(ClaimTypes.NameIdentifier);
+        await ReloadAsync();
+    }
+
+    // Każda operacja we własnym zakresie DI: obwód Blazora żyje długo, a UserManager trzyma śledzone encje.
+    private async Task<T> WithUsersAsync<T>(Func<UserAdminService, Task<T>> action)
+    {
+        await using var scope = Scopes.CreateAsyncScope();
+        return await action(scope.ServiceProvider.GetRequiredService<UserAdminService>());
+    }
+
+    private async Task ReloadAsync() => users = await WithUsersAsync(s => s.ListAsync());
+
+    private async Task<bool> RunAsync(Func<UserAdminService, Task<IdentityResult>> action, string success)
+    {
+        busy = true;
+        try
+        {
+            var result = await WithUsersAsync(action);
+            if (result.Succeeded) Snackbar.Add(success, Severity.Success);
+            else Snackbar.Add(string.Join(" ", result.Errors.Select(e => e.Description)), Severity.Error);
+            await ReloadAsync();
+            return result.Succeeded;
+        }
+        finally
+        {
+            busy = false;
+        }
+    }
+
+    private async Task Create()
+    {
+        var name = login!.Trim();
+        var plain = UserAdminService.GeneratePassword();
+        if (await RunAsync(s => s.CreateUserAsync(name, plain, role), $"Utworzono konto {name} ({AppRoles.Label(role)})."))
+        {
+            password = (name, plain);
+            login = null;
+        }
+    }
+
+    private Task SetRole(UserSummary u, UserRole newRole) =>
+        RunAsync(s => s.SetRoleAsync(u.Id, newRole, currentUserId!),
+            newRole == UserRole.Admin
+                ? $"{u.Login} jest administratorem (po ponownym zalogowaniu albo w ciągu 5 minut)."
+                : $"{u.Login} jest użytkownikiem; zalogowane urządzenia zostaną wylogowane w ciągu 5 minut.");
+
+    private async Task ResetPassword(UserSummary u)
+    {
+        if (await Dialogs.ShowMessageBoxAsync("Nadać nowe hasło?", $"Obecne hasło {u.Login} przestanie działać, a zalogowane urządzenia zostaną wylogowane w ciągu 5 minut.",
+                yesText: "Nadaj nowe hasło", cancelText: "Anuluj") != true) return;
+        var plain = UserAdminService.GeneratePassword();
+        if (await RunAsync(s => s.SetPasswordAsync(u.Id, plain), $"Nowe hasło dla {u.Login}.")) password = (u.Login, plain);
+    }
+
+    private async Task ResetMfa(UserSummary u)
+    {
+        if (await Dialogs.ShowMessageBoxAsync("Usunąć weryfikację dwuetapową?",
+                $"{u.Login}: aplikacja uwierzytelniająca i wszystkie passkey zostaną usunięte, a zalogowane urządzenia wylogowane w ciągu 5 minut. " +
+                "Przy następnym logowaniu (login i hasło) trzeba będzie skonfigurować aplikację uwierzytelniającą od nowa.",
+                yesText: "Usuń 2FA", cancelText: "Anuluj") != true) return;
+        await RunAsync(s => s.ResetMfaByIdAsync(u.Id), $"Usunięto 2FA dla {u.Login}.");
+    }
+
+    private Task Unlock(UserSummary u) => RunAsync(s => s.UnlockAsync(u.Id), $"Odblokowano {u.Login}.");
+
+    private async Task Delete(UserSummary u)
+    {
+        if (await Dialogs.ShowMessageBoxAsync("Usunąć konto?", $"Konto {u.Login} zostanie usunięte razem z passkey i powiadomieniami na jego urządzeniach. Tego nie da się cofnąć.",
+                yesText: "Usuń konto", cancelText: "Anuluj") != true) return;
+        await RunAsync(s => s.DeleteAsync(u.Id, currentUserId!), $"Usunięto konto {u.Login}.");
+    }
+}

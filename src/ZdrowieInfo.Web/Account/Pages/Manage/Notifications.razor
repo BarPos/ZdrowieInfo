@@ -10,7 +10,10 @@
 <PageTitle>Powiadomienia – ZdrowieInfo</PageTitle>
 
 <h2>Powiadomienia</h2>
-<p>Powiadomienie przychodzi, gdy raport dzienny jest gotowy (ok. 5:30), gdy źródło przestaje być dostępne i gdy dostęp wraca.</p>
+<AuthorizeView Policy="@ZdrowieInfo.Server.Accounts.AppRoles.AdminPolicy" Context="admin">
+    <Authorized><p>Powiadomienie przychodzi, gdy raport dzienny jest gotowy (ok. 5:30), gdy źródło przestaje być dostępne i gdy dostęp wraca.</p></Authorized>
+    <NotAuthorized><p>Powiadomienie przychodzi, gdy raport dzienny jest gotowy (ok. 5:30).</p></NotAuthorized>
+</AuthorizeView>
 <p class="muted">Na iPhonie powiadomienia działają od iOS 16.4 i tylko w aplikacji dodanej do ekranu początkowego (Udostępnij → Do ekranu początkowego) – włącz je z poziomu tej aplikacji, nie w Safari.</p>
 
 <section class="card push-panel" data-push-panel>

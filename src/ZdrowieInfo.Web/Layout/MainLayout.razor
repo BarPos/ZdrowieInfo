@@ -7,8 +7,10 @@
             <nav class="mainnav" aria-label="Menu główne">
                 <NavLink href="" Match="NavLinkMatch.All">Raporty</NavLink>
                 <NavLink href="szukaj">Szukaj</NavLink>
-                <NavLink href="incydenty">Incydenty</NavLink>
-                <NavLink href="panel" data-enhance-nav="false">Panel</NavLink>
+                <AuthorizeView Policy="@ZdrowieInfo.Server.Accounts.AppRoles.AdminPolicy" Context="admin">
+                    <NavLink href="incydenty">Incydenty</NavLink>
+                    <NavLink href="panel" data-enhance-nav="false">Panel</NavLink>
+                </AuthorizeView>
                 <NavLink href="Account/Manage">Konto</NavLink>
                 <form action="Account/Logout" method="post" class="inline">
                     <AntiforgeryToken />

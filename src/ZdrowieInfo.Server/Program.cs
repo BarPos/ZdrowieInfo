@@ -98,6 +98,7 @@ app.MapHealthChecks("/healthz").AllowAnonymous();
 app.MapZdrowieInfoWeb();
 app.MapReportsApi();
 app.MapReportFiles();
+app.MapReportActions();
 app.MapPushEndpoints();
 app.MapZdrowieInfoMcp();
 

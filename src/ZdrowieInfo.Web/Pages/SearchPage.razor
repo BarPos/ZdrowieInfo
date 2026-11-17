@@ -59,11 +59,11 @@
     }
     else
     {
-        <p class="muted">Wyniki: @hits.Count@(hits.Count >= Limit ? "+" : "")</p>
-        @foreach (var group in hits.GroupBy(h => h.Date).OrderByDescending(g => g.Key))
+        <p class="muted">Wyniki @((page - 1) * PageSize + 1)–@((page - 1) * PageSize + hits.Count)@(hasMore ? ", są kolejne" : "")</p>
+        @foreach (var group in hits.GroupBy(h => h.Report).OrderByDescending(g => g.Key.End).ThenBy(g => g.Key.Kind))
         {
             <section class="search-group">
-                <h2><a href="raporty/@group.Key.ToString("yyyy-MM-dd")">@group.Key.ToString("dddd, d MMMM yyyy")</a> <span class="muted">· @group.First().ReportTitle</span></h2>
+                <h2><a href="raporty/@group.Key.Slug">@(group.Key.Kind == ReportKind.Daily ? group.Key.End.ToString("dddd, d MMMM yyyy") : "Raport okresowy " + group.Key.Label)</a> <span class="muted">· @group.First().ReportTitle</span></h2>
                 @foreach (var hit in group)
                 {
                     <article class="search-hit">
@@ -73,7 +73,7 @@
                                 <span class="badge @(hit.Importance == Importance.Critical ? "critical" : hit.Importance == Importance.High ? "high" : "")">@ReportVocabulary.Label(hit.Importance!.Value)</span>
                                 <span class="muted">@ReportVocabulary.Label(hit.Category!.Value)</span>
                             </p>
-                            <h3><a href="raporty/@hit.Date.ToString("yyyy-MM-dd")">@hit.Headline</a></h3>
+                            <h3><a href="raporty/@hit.Report.Slug">@hit.Headline</a></h3>
                         }
                         <p class="search-snippet">@((MarkupString)hit.SnippetHtml)</p>
                         @if (hit.Sources.Count > 0)
@@ -90,11 +90,12 @@
                 }
             </section>
         }
+        <Pager Page="page" HasMore="hasMore" />
     }
 }
 
 @code {
-    private const int Limit = 100;
+    private const int PageSize = 25;
 
     [SupplyParameterFromQuery(Name = "q")] private string? Q { get; set; }
     [SupplyParameterFromQuery(Name = "od")] private string? Od { get; set; }
@@ -102,6 +103,10 @@
     [SupplyParameterFromQuery(Name = "waznosc")] private string? Waznosc { get; set; }
     [SupplyParameterFromQuery(Name = "kategoria")] private string? Kategoria { get; set; }
     [SupplyParameterFromQuery(Name = "zrodlo")] private int? Zrodlo { get; set; }
+    [SupplyParameterFromQuery(Name = Pager.Parameter)] private int? Strona { get; set; }
+
+    private int page = 1;
+    private bool hasMore;
 
     private sealed record SourceOption(int Id, string Name);
 
@@ -116,13 +121,17 @@
             sources = await db.Sources.AsNoTracking().OrderBy(s => s.Name).Select(s => new SourceOption(s.Id, s.Name)).ToListAsync();
 
         if (string.IsNullOrWhiteSpace(Q) && !HasFilters) return;
-        hits = await Search.SearchAsync(new SearchFilters(
+        page = Pager.Normalize(Strona);
+        var result = await Search.SearchPageAsync(new SearchFilters(
             Q,
             DateOnly.TryParse(Od, out var from) ? from : null,
             DateOnly.TryParse(Do, out var to) ? to : null,
             Waznosc is not null && ReportVocabulary.Importances.TryGetValue(Waznosc, out var importance) ? importance : null,
             Kategoria is not null && ReportVocabulary.Categories.TryGetValue(Kategoria, out var category) ? category : null,
             Zrodlo,
-            Limit));
+            PageSize,
+            (page - 1) * PageSize));
+        hits = result.Hits;
+        hasMore = result.HasMore;
     }
 }

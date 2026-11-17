@@ -29,7 +29,7 @@ public sealed partial class SampleReportGenerator : IReportGenerator
 
         var document = new ReportDocument
         {
-            Title = $"Raport przykładowy – {request.Date:dd.MM.yyyy}",
+            Title = $"Raport przykładowy – {request.Key.Label}",
             Summary = $"Raport przygotowany bez Claude (tryb przykładowy): {request.Items.Count} wykrytych wpisów, bez oceny ważności.",
             Findings = findings,
             Ignored = [],

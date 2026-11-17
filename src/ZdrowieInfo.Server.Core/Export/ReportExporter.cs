@@ -22,18 +22,21 @@ public sealed class ReportExporter(
 {
     private readonly SemaphoreSlim _lock = new(1, 1);
 
-    public async Task<ExportResult> ExportAsync(DateOnly date, CancellationToken ct = default)
+    public Task<ExportResult> ExportAsync(DateOnly date, CancellationToken ct = default) => ExportAsync(ReportKey.Daily(date), ct);
+
+    /// <summary>Kompilacje po kolei (jedna naraz) – także przy pobieraniu przez publiczny link.</summary>
+    public async Task<ExportResult> ExportAsync(ReportKey key, CancellationToken ct = default)
     {
         await _lock.WaitAsync(ct);
         try
         {
             await using var db = await dbFactory.CreateDbContextAsync(ct);
-            var view = await ReportView.LoadAsync(db, date, ct);
-            if (view is null) return new ExportResult(false, null, null, "Nie ma raportu na ten dzień.");
+            var view = await ReportView.LoadAsync(db, key, ct);
+            if (view is null) return new ExportResult(false, null, null, "Nie ma takiego raportu.");
 
-            var folder = Directory.CreateDirectory(Path.Combine(app.Value.DataDirectory, "reports", date.Year.ToString())).FullName;
-            var texPath = Path.Combine(folder, $"raport-{date:yyyy-MM-dd}.tex");
-            var pdfPath = Path.Combine(folder, $"raport-{date:yyyy-MM-dd}.pdf");
+            var folder = Directory.CreateDirectory(Path.Combine(app.Value.DataDirectory, "reports", key.End.Year.ToString())).FullName;
+            var texPath = Path.Combine(folder, $"raport-{key.Slug}.tex");
+            var pdfPath = Path.Combine(folder, $"raport-{key.Slug}.pdf");
 
             string tex;
             try
@@ -52,7 +55,7 @@ public sealed class ReportExporter(
             {
                 await File.WriteAllBytesAsync(pdfPath, pdf.Pdf!, ct);
                 await SaveStateAsync(db, view.Report.Id, texPath, pdfPath, null, ct);
-                logger.LogInformation("Raport {Date}: PDF {Size} KB.", date, pdf.Pdf!.Length / 1024);
+                logger.LogInformation("Raport {Key}: PDF {Size} KB.", key, pdf.Pdf!.Length / 1024);
                 return new ExportResult(true, texPath, pdfPath, null);
             }
 

@@ -10,7 +10,7 @@
 
 <AdminShell>
     <MudText Typo="Typo.h4" Class="mb-2">Wykryte wpisy</MudText>
-    <MudText Typo="Typo.body2" Class="mb-4">Nowe i zaktualizowane wpisy oraz zmiany stron, które trafią do raportu dziennego (etap 3).</MudText>
+    <MudText Typo="Typo.body2" Class="mb-4">Nowe i zaktualizowane wpisy oraz zmiany stron, które trafiają do raportu dziennego. Wpisy ze stanu bazowego i z archiwum list (raporty wstecz) – po włączeniu przełącznika.</MudText>
     <MudStack Row="true" Spacing="3" AlignItems="AlignItems.Center" Wrap="Wrap.Wrap" Class="mb-2">
         <MudSelect T="int?" Value="sourceId" ValueChanged="SourceChanged" Label="Źródło" Clearable="true" Style="min-width:280px" Dense="true">
             @foreach (var s in sources)
@@ -20,7 +20,7 @@
         </MudSelect>
         <MudSwitch T="bool" Value="showBaseline" ValueChanged="BaselineChanged" Color="Color.Primary" Label="Pokaż wpisy ze stanu bazowego" />
     </MudStack>
-    <MudDataGrid T="Row" Items="rows" Dense="true" Hover="true" Loading="rows is null" RowClick="@(e => Show(e.Item))">
+    <MudDataGrid @ref="grid" T="Row" ServerData="LoadServerData" Dense="true" Hover="true" RowClick="@(e => Show(e.Item))">
         <NoRecordsContent>
             <MudText>Brak wpisów. Nowe pojawią się po kolejnych sprawdzeniach (zastane wpisy to stan bazowy).</MudText>
         </NoRecordsContent>
@@ -56,7 +56,7 @@
     private sealed record Row(SourceItem Item, string Source);
     private sealed record SourceOption(int Id, string Name);
 
-    private List<Row>? rows;
+    private MudDataGrid<Row>? grid;
     private List<SourceOption> sources = [];
     private int? sourceId;
     private bool showBaseline;
@@ -65,19 +65,23 @@
     {
         await using var db = await DbFactory.CreateDbContextAsync();
         sources = await db.Sources.AsNoTracking().OrderBy(s => s.Name).Select(s => new SourceOption(s.Id, s.Name)).ToListAsync();
-        await LoadAsync();
     }
 
-    private async Task LoadAsync()
+    // Stronicowanie po stronie serwera: tylko bieżąca strona z bazy, liczba wszystkich wpisów do pagera.
+    private async Task<GridData<Row>> LoadServerData(GridState<Row> state, CancellationToken ct)
     {
-        await using var db = await DbFactory.CreateDbContextAsync();
+        await using var db = await DbFactory.CreateDbContextAsync(ct);
         var query = from i in db.SourceItems.AsNoTracking()
                     join s in db.Sources on i.SourceId equals s.Id
                     where (showBaseline || !i.IsBaseline) && (sourceId == null || i.SourceId == sourceId)
-                    orderby i.LastChangedAt descending, i.Id descending
-                    select new Row(i, s.Name);
-        rows = await query.Take(500).ToListAsync();
+                    select new { i, s.Name };
+        var total = await query.CountAsync(ct);
+        var page = await query.OrderByDescending(x => x.i.LastChangedAt).ThenByDescending(x => x.i.Id)
+            .Skip(state.Page * state.PageSize).Take(state.PageSize).ToListAsync(ct);
+        return new GridData<Row> { TotalItems = total, Items = page.Select(x => new Row(x.i, x.Name)).ToList() };
     }
+
+    private Task LoadAsync() => grid?.ReloadServerData() ?? Task.CompletedTask;
 
     private async Task SourceChanged(int? value) { sourceId = value; await LoadAsync(); }
 

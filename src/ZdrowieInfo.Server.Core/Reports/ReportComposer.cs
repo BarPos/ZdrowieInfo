@@ -84,11 +84,28 @@ public static class ReportComposer
         return inputs;
     }
 
-    public static string BuildUserMessage(DateOnly date, ClinicProfile profile, IReadOnlyList<ReportInputItem> inputs, IReadOnlyList<string>? previousErrors = null)
+    public static string BuildUserMessage(DateOnly date, ClinicProfile profile, IReadOnlyList<ReportInputItem> inputs, IReadOnlyList<string>? previousErrors = null) =>
+        BuildUserMessage(new GenerationRequest(date, profile, inputs, previousErrors));
+
+    public static string BuildUserMessage(GenerationRequest request)
     {
+        var (date, profile, inputs, previousErrors) = (request.Date, request.Profile, request.Items, request.PreviousErrors);
+        var pl = CultureInfo.GetCultureInfo("pl-PL");
         var e = HtmlEncoder.Default;
         var sb = new StringBuilder();
-        sb.Append("Data raportu: ").Append(date.ToString("dd.MM.yyyy (dddd)", CultureInfo.GetCultureInfo("pl-PL"))).Append("\n\n");
+        if (request.PeriodStart is { } start)
+        {
+            sb.Append("Raport okresowy za okres od ").Append(start.ToString("dd.MM.yyyy", pl)).Append(" do ").Append(date.ToString("dd.MM.yyyy", pl)).Append(".\n");
+            sb.Append("Wejście to wszystkie wpisy opublikowane w tym okresie (także te, które były już w raportach dziennych), a nie tylko nowe od ostatniego raportu. ")
+              .Append("„title” ma zawierać okres, „summary” – najważniejsze sprawy całego okresu. Terminy licz od ostatniego dnia okresu.\n\n");
+        }
+        else
+        {
+            sb.Append("Data raportu: ").Append(date.ToString("dd.MM.yyyy (dddd)", pl)).Append("\n");
+            if (request.Retrospective)
+                sb.Append("Raport przygotowywany wstecz: wejście to wpisy opublikowane tego dnia (a nie nowe od ostatniego raportu).\n");
+            sb.Append('\n');
+        }
 
         sb.Append("<profil_przychodni>\n");
         sb.Append("Zakresy świadczeń: ").Append(profile.Services.Count == 0 ? "(nie podano)" : string.Join(", ", profile.Services)).Append('\n');

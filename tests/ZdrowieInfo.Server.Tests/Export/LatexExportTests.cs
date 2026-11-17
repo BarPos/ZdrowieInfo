@@ -3,6 +3,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using Microsoft.Extensions.Time.Testing;
 using ZdrowieInfo.Server.Common;
+using ZdrowieInfo.Server.Data;
 using ZdrowieInfo.Server.Export;
 using ZdrowieInfo.Server.Reports;
 using ZdrowieInfo.Server.Tests.Infrastructure;
@@ -85,7 +86,7 @@ public class LatexExportTests(PostgresFixture postgres)
     }
 
     [Fact]
-    public async Task Report_files_require_login_and_are_generated_on_demand()
+    public async Task Report_pdf_is_for_admins_and_generated_on_demand()
     {
         await using var app = await AppFactory.CreateAsync(postgres);
         await app.AddItemAsync("ezdrowie-podmioty", "Przerwa w PUI", "https://ezdrowie.gov.pl/portal/artykul/pui", "Platforma Usług Inteligentnych (PUI) będzie niedostępna w nocy.");
@@ -94,10 +95,13 @@ public class LatexExportTests(PostgresFixture postgres)
         var anonymous = app.CreateBrowser();
         Assert.Equal(HttpStatusCode.Redirect, (await anonymous.GetAsync("/eksport/raport-2026-11-18.pdf")).StatusCode);
 
+        var reader = await app.SignedInBrowserAsync(UserRole.User, "czytelnik");
+        Assert.Equal(HttpStatusCode.Redirect, (await reader.GetAsync("/eksport/raport-2026-11-18.pdf")).StatusCode); // → odmowa dostępu
+        Assert.Contains("/Account/AccessDenied", (await reader.GetAsync("/eksport/raport-2026-11-18.pdf")).Headers.Location!.ToString());
+
         var browser = await app.SignedInBrowserAsync();
-        var tex = await browser.GetAsync("/eksport/raport-2026-11-18.tex");
-        Assert.Equal(HttpStatusCode.OK, tex.StatusCode);
-        Assert.Contains(@"\documentclass", await tex.Content.ReadAsStringAsync());
+        // Pobieranie .tex usunięte – plik powstaje tylko do kompilacji PDF.
+        Assert.Equal(HttpStatusCode.NotFound, (await browser.GetAsync("/eksport/raport-2026-11-18.tex")).StatusCode);
         Assert.Equal(HttpStatusCode.NotFound, (await browser.GetAsync("/eksport/raport-2026-11-17.pdf")).StatusCode);
 
         var pdf = await browser.GetAsync("/eksport/raport-2026-11-18.pdf");

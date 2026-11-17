@@ -1,4 +1,4 @@
-%% ZdrowieInfo – raport dzienny. Szablon Scriban → XeLaTeX (latexmk -xelatex albo Tectonic).
+%% ZdrowieInfo – raport dzienny albo okresowy. Szablon Scriban → XeLaTeX (latexmk -xelatex albo Tectonic).
 %% Każdy tekst z raportu przechodzi przez | latex (akapity) albo | latex_line (jedna linia), adresy przez | latex_url. Bez shell-escape.
 \documentclass[11pt,a4paper]{article}
 \usepackage{fontspec}
@@ -35,7 +35,7 @@
 
 \pagestyle{fancy}
 \fancyhf{}
-\fancyhead[L]{\small\sffamily\color{muted}ZdrowieInfo · raport dzienny}
+\fancyhead[L]{\small\sffamily\color{muted}ZdrowieInfo · {{ kind_label }}}
 \fancyhead[R]{\small\sffamily\color{muted} {{ date_short }} }
 \fancyfoot[C]{\small\sffamily\color{muted}\thepage}
 \renewcommand{\headrulewidth}{0.4pt}
@@ -44,7 +44,7 @@
 
 \begin{document}
 
-{\small\sffamily\color{muted} ZDROWIEINFO · RAPORT DZIENNY}\par\vspace{0.2em}
+{\small\sffamily\color{muted} ZDROWIEINFO · {{ kind_label | string.upcase }}}\par\vspace{0.2em}
 {\LARGE\bfseries {{ title | latex_line }} \par}
 \vspace{0.3em}
 {\color{muted} {{ date_long | latex_line }} }\par
@@ -54,7 +54,7 @@
 Przygotował: & {{ producer | latex_line }} \\
 Punkty: & {{ findings_count }}{{ if critical_count > 0 }} (krytyczne: {{ critical_count }}){{ end }} \\
 Wpisy źródłowe: & {{ entries_count }} \\
-Źródła: & sprawdzone w tym dniu {{ sources_checked }} z {{ sources_total }}{{ if source_problems.size > 0 }}, z uwagami: {{ source_problems.size }}{{ end }} \\
+{{ if sources_total > 0 }}Źródła: & sprawdzone w tym dniu {{ sources_checked }} z {{ sources_total }}{{ if source_problems.size > 0 }}, z uwagami: {{ source_problems.size }}{{ end }} \\{{ end }}
 \end{tabular}}
 \vspace{0.4em}
 {{ if status_note }}
@@ -101,6 +101,7 @@ Wpisy źródłowe: & {{ entries_count }} \\
 \end{itemize}
 {{ end }}
 
+{{ if sources_total > 0 }}
 \section{Stan źródeł}
 {{ if source_problems.size == 0 }}
 Wszystkie {{ sources_total }} źródeł bez problemów (sprawdzone w tym dniu: {{ sources_checked }}; pozostałe według swojej częstotliwości).
@@ -114,6 +115,7 @@ Bez problemów: {{ sources_total - source_problems.size }} z {{ sources_total }}
 {{ end }}
 {{ for r in recoveries }}
 {\small\color{muted} {{ r | latex_line }} }\par
+{{ end }}
 {{ end }}
 
 {{ if !is_ai_error && entries.size > 0 }}

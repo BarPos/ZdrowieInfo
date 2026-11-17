@@ -42,6 +42,16 @@ public static class HtmlForms
         return await client.PostAsync(action, new FormUrlEncodedContent(fields));
     }
 
+    /// <summary>Zwykły formularz POST (bez @formname) wskazany atrybutem action – pola, w tym token antiforgery, ze strony.</summary>
+    public static async Task<HttpResponseMessage> SubmitActionAsync(this HttpClient client, string pageUrl, string action)
+    {
+        var document = await client.GetDocumentAsync(pageUrl);
+        var form = document.Forms.SingleOrDefault(f => f.GetAttribute("action") == action)
+                   ?? throw new InvalidOperationException($"Brak formularza {action} na {pageUrl}.");
+        var fields = form.QuerySelectorAll<IHtmlInputElement>("input[name]").ToDictionary(i => i.Name!, i => i.Value);
+        return await client.PostAsync("/" + action, new FormUrlEncodedContent(fields));
+    }
+
     public static string? RedirectPath(this HttpResponseMessage response)
     {
         var location = response.Headers.Location;

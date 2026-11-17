@@ -147,6 +147,6 @@ public class ReportsApiTests(PostgresFixture postgres)
         Assert.Contains("18 listopada 2026 roku w godzinach 20:00–24:00", page);
         Assert.Contains("Stan źródeł", page);
 
-        Assert.Contains("Nie ma raportu", await browser.TextAsync("/raporty/2026-11-17"));
+        Assert.Contains("Nie ma takiego raportu", await browser.TextAsync("/raporty/2026-11-17"));
     }
 }

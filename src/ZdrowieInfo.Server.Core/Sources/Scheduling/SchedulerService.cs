@@ -2,11 +2,12 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using ZdrowieInfo.Server.Common;
+using ZdrowieInfo.Server.Reports;
 
 namespace ZdrowieInfo.Server.Sources.Scheduling;
 
-/// <summary>Pętla co minutę: stan bazowy, sprawdzenie o 5:00 (z nadrabianiem), ponowienia, porządki raz na dobę.</summary>
-public sealed class SchedulerService(SourceScheduler scheduler, TimeProvider time, IOptions<SourcesOptions> options, ILogger<SchedulerService> logger)
+/// <summary>Pętla co minutę: stan bazowy, sprawdzenie o 5:00 (z nadrabianiem), ponowienia, raport dzienny od 5:30, porządki raz na dobę.</summary>
+public sealed class SchedulerService(SourceScheduler scheduler, ReportScheduler reports, TimeProvider time, IOptions<SourcesOptions> options, ILogger<SchedulerService> logger)
     : BackgroundService
 {
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -23,6 +24,7 @@ public sealed class SchedulerService(SourceScheduler scheduler, TimeProvider tim
             try
             {
                 await scheduler.RunDueAsync(stoppingToken);
+                await reports.RunDueAsync(stoppingToken);
 
                 var today = DateOnly.FromDateTime(WarsawClock.ToLocal(time.GetUtcNow()));
                 if (lastCleanup != today)

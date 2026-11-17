@@ -170,6 +170,13 @@ public sealed class SourceItem
     public DateTimeOffset? DetailFetchedAt { get; set; }
     public int DetailAttempts { get; set; }
     public string? DetailError { get; set; }
+
+    /// <summary>
+    /// Kiedy wpis trafił do raportu (albo został oznaczony jako zaraportowany poleceniem --mark-reported-before).
+    /// Null = czeka na raport. Aktualizacja wpisu zeruje te pola, więc wraca do następnego raportu.
+    /// </summary>
+    public DateTimeOffset? ReportedAt { get; set; }
+    public long? ReportId { get; set; }
 }
 
 /// <summary>Problem z dostępem do źródła (tabela <c>source_incidents</c>), przechowywany bezterminowo.</summary>

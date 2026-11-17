@@ -2,6 +2,8 @@ using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.ChangeTracking;
+using ZdrowieInfo.Server.ApiKeys;
+using ZdrowieInfo.Server.Reports;
 using ZdrowieInfo.Server.Sources;
 
 namespace ZdrowieInfo.Server.Data;
@@ -15,6 +17,10 @@ public sealed class ZdrowieInfoDbContext(DbContextOptions<ZdrowieInfoDbContext> 
     public DbSet<SourceItem> SourceItems => Set<SourceItem>();
     public DbSet<SourceIncident> SourceIncidents => Set<SourceIncident>();
     public DbSet<CheckRun> CheckRuns => Set<CheckRun>();
+    public DbSet<Report> Reports => Set<Report>();
+    public DbSet<ReportFinding> ReportFindings => Set<ReportFinding>();
+    public DbSet<FindingCitation> FindingCitations => Set<FindingCitation>();
+    public DbSet<ApiKey> ApiKeys => Set<ApiKey>();
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
@@ -71,6 +77,8 @@ public sealed class ZdrowieInfoDbContext(DbContextOptions<ZdrowieInfoDbContext> 
             e.Property(x => x.Url).HasMaxLength(1000);
             e.Property(x => x.Title).HasMaxLength(1000);
             e.Property(x => x.Kind).HasConversion<string>().HasMaxLength(20);
+            e.HasIndex(x => x.ReportedAt);
+            e.HasOne<Report>().WithMany().HasForeignKey(x => x.ReportId).OnDelete(DeleteBehavior.SetNull);
         });
 
         builder.Entity<SourceIncident>(e =>
@@ -89,5 +97,58 @@ public sealed class ZdrowieInfoDbContext(DbContextOptions<ZdrowieInfoDbContext> 
             e.Property(x => x.Status).HasConversion<string>().HasMaxLength(20);
             e.PrimitiveCollection(x => x.Groups).ElementType().HasConversion<string>();
         });
+
+        builder.Entity<Report>(e =>
+        {
+            e.ToTable("reports");
+            e.HasIndex(x => x.Date).IsUnique();
+            e.Property(x => x.Status).HasConversion<string>().HasMaxLength(20);
+            e.Property(x => x.Title).HasMaxLength(500);
+            e.Property(x => x.Producer).HasMaxLength(100);
+            e.Property(x => x.Model).HasMaxLength(100);
+            e.Property(x => x.Body).HasColumnType("jsonb").HasConversion(Json<ReportDocument>(), JsonComparer<ReportDocument>());
+            e.Property(x => x.SourcesState).HasColumnType("jsonb").HasConversion(Json<List<SourceStateEntry>>(), JsonComparer<List<SourceStateEntry>>());
+            e.Property(x => x.AiUsage).HasColumnType("jsonb").HasConversion(Json<AiUsage?>(), JsonComparer<AiUsage?>());
+            e.HasMany(x => x.Findings).WithOne().HasForeignKey(x => x.ReportId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        builder.Entity<ReportFinding>(e =>
+        {
+            e.ToTable("report_findings");
+            e.Property(x => x.Importance).HasConversion<string>().HasMaxLength(20);
+            e.Property(x => x.Category).HasConversion<string>().HasMaxLength(20);
+            e.Property(x => x.Headline).HasMaxLength(1000);
+            e.HasMany(x => x.Citations).WithOne().HasForeignKey(x => x.FindingId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        builder.Entity<FindingCitation>(e =>
+        {
+            e.ToTable("finding_citations");
+            e.Property(x => x.Title).HasMaxLength(1000);
+            e.Property(x => x.Url).HasMaxLength(1000);
+            e.HasOne<SourceItem>().WithMany().HasForeignKey(x => x.SourceItemId).OnDelete(DeleteBehavior.SetNull);
+        });
+
+        builder.Entity<ApiKey>(e =>
+        {
+            e.ToTable("api_keys");
+            e.HasIndex(x => x.Prefix).IsUnique();
+            e.Property(x => x.Name).HasMaxLength(200);
+            e.Property(x => x.Prefix).HasMaxLength(32);
+            e.Property(x => x.SecretHash).HasMaxLength(128);
+        });
     }
+
+    private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
+    {
+        PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower,
+    };
+
+    private static Microsoft.EntityFrameworkCore.Storage.ValueConversion.ValueConverter<T, string> Json<T>() =>
+        new(v => JsonSerializer.Serialize(v, JsonOptions), v => JsonSerializer.Deserialize<T>(v, JsonOptions)!);
+
+    private static ValueComparer<T> JsonComparer<T>() => new(
+        (a, b) => JsonSerializer.Serialize(a, JsonOptions) == JsonSerializer.Serialize(b, JsonOptions),
+        v => JsonSerializer.Serialize(v, JsonOptions).GetHashCode(),
+        v => JsonSerializer.Deserialize<T>(JsonSerializer.Serialize(v, JsonOptions), JsonOptions)!);
 }

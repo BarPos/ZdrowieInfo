@@ -191,3 +191,38 @@ Problem: sprawdzana była tylko pierwsza strona listy. Przy więcej niż jednej 
 - **Sprawdzone na żywo (17.11.2026):** CSIRT ze stanem bazowym z 2. strony → sprawdzenie od 1. strony przeszło na 2., zatrzymało się na znanym wpisie: 5 nowych (bez wyróżnionego duplikatu), bez ostrzeżenia. Komunikaty DI bez znanych wpisów → lista zapasowa (archiwum), wpisy od 16.11, treść pobrana dla wszystkich. Po poprawkach dwa pełne przebiegi 23 źródeł: 0 błędów, 0 nowych, 1 strona na źródło. Endpoint JSON ezdrowie pokazał 5 wpisów z 16.11 — strona HTML (3 wpisy) pominęłaby m.in. „Planowane prace techniczne w dniach 16-20.11.2026” i przerwę SSOZ II.
 - **Nie sprawdzone:** limit 10 stron i przejście przez kilka stron archiwum NFZ (tylko logika i testy jednej strony).
 - **Aktualizacja konfiguracji na istniejącej instalacji:** lista domyślna nie nadpisuje źródeł z bazy; po aktualizacji aplikacji z nowymi selektorami: `--apply-default-sources [slug]` (zmienione źródła dostają nowy stan bazowy).
+
+# Decyzje — etap 3
+
+## D16. Raport dzienny
+
+- **Wejście:** wszystkie wpisy z `reported_at IS NULL` i nie ze stanu bazowego (R5). Ten sam artykuł (URL) z kilku źródeł to **jeden** wpis wejścia z kilkoma `source_item_ids` (NFZ Aktualności i Komunikaty DI). Aktualizacja wpisu (zmiana tytułu/daty) zeruje `reported_at`, więc wraca do najbliższego raportu jako „aktualizacja”. Treść powyżej 20 000 znaków jest skracana jawnie (adnotacja w wejściu), nie po cichu.
+- **Brak wpisów** → raport „Brak zmian – data” bez wywołania API (z sekcją „Stan źródeł”).
+- **Są wpisy** → generator → walidacja → przy błędach **jedna** ponowna próba z listą błędów → lepsza z dwóch odpowiedzi; nadal błędy → status „do weryfikacji” (cytaty oznaczone jako niezweryfikowane, uwagi w raporcie).
+- **Ponowienie z błędami to nowe, jednoturowe żądanie** (wejście + lista błędów), nie rozmowa z poprzednią odpowiedzią — omija to zasady przekazywania bloków thinking między turami w nowszych modelach.
+- **Błąd przejściowy** (429, 5xx, sieć) → ponowienie co 10 min; po 6:20 i co najmniej jednej wcześniejszej próbie → raport „bez analizy” (lista wpisów). **Błąd trwały** (brak klucza, 4xx — klucz, kredyty, parametry; odmowa) → od razu raport „bez analizy”.
+- **Harmonogram:** od 5:30; do 6:00 czeka, aż sprawdzanie i ponowienia źródeł się zakończą; jeden raport na dzień (unikalna data). Liczone z bazy jak harmonogram źródeł.
+- **„Stan źródeł”** w każdym raporcie: problemy i ostrzeżenia (np. „możliwe pominięte wpisy” z D15) z pobrań od poprzedniego raportu, otwarte incydenty, przywrócenia dostępu.
+- **Widok:** `/raporty/rrrr-mm-dd` (R1) — punkty wg ważności, działanie, cytaty z linkiem do źródła i datą, pominięte wpisy z powodami, stan źródeł, wpisy źródłowe. Static SSR, czytelny na telefonie.
+- **Start raportów na serwerze:** `--mark-reported-before rrrr-mm-dd` (R9) — wpisy z tygodnia obserwacji nie trafiają hurtem do pierwszego raportu.
+
+## D17. Walidacja cytatów
+
+Cytat musi być dosłownym fragmentem tytułu, opisu albo treści wskazanego wpisu po ujednoliceniu: wielkość liter, białe znaki, cudzysłowy („” → "), myślniki (– — → -), miękkie łączniki. Wielokropek („…”, „...”, „[...]”) dzieli cytat na części, które muszą wystąpić w tej kolejności. Minimum 8 znaków. Każdy punkt musi mieć cytat; każdy wpis wejścia musi być w punkcie albo na liście `ignored` (dla Claude; zewnętrzny producent nie musi rozliczać wszystkiego).
+
+## D18. Claude
+
+- `ClaudeReportGenerator`: oficjalne SDK `Anthropic`, `client.Beta.Messages.Create` (beta tylko dla serwerowego fallbacku modelu `server-side-fallback-2026-07-01` + `Fallbacks = new Default()`), structured outputs z JSON Schema raportu (enumy ważności i kategorii po polsku), prompt systemowy w `ReportComposer.SystemPrompt` z `CacheControl`, model i effort z panelu (domyślnie `claude-sonnet-5-5`, `medium`), klucz z `app_settings` (Data Protection). Bez streamingu, `MaxTokens` 16 000.
+- Prompt systemowy: kryteria ważności z planu, kategorie, zasady cytowania, łączenie wpisów o tej samej sprawie, obowiązek rozliczenia każdego wpisu. Profil przychodni, data raportu i wpisy w wiadomości użytkownika (zmienna część poza cache).
+- `SampleReportGenerator` (`ZdrowieInfo:Reports:Generator = Sample`, domyślnie w Development i testach): punkt na wpis, cytat = pierwsze zdanie (przechodzi walidację), bez oceny — do pracy bez klucza.
+- **Nie sprawdzone z prawdziwym API** (klucz od 18.11.2026): czy schema z `"type": ["string", "null"]` jest akceptowana, czy odpowiedź mieści się w 16 000 tokenów przy wielu wpisach, jakość ocen i cytatów. Kolejność na jutro (lokalnie, baza deweloperska):
+  1. uruchom aplikację z generatorem Claude: `cd src/ZdrowieInfo.Server && ZdrowieInfo__Reports__Generator=Claude dotnet run`, wpisz klucz w **Panel → Ustawienia** (i listę systemów w profilu), zatrzymaj aplikację;
+  2. ponownie przeanalizuj wpisy z raportu przykładowego z 17.11: `ZdrowieInfo__Reports__Generator=Claude dotnet run -- --generate-report 2026-11-17 --replace` (bez daty polecenie wzięłoby dzień bieżący, a wtedy nie ma nowych wpisów → „Brak zmian”);
+  3. przejrzyj `/raporty/2026-11-17`: oceny, cytaty, sekcję „Pominięte”, uwagi walidacji; w logu zużycie tokenów i trafienie cache.
+- **Ograniczenia:** raport „bez analizy” też zużywa wpisy — ponowną analizę daje tylko `--replace` dla tej daty (np. po dniach bez klucza). Raport przygotowany ręcznie przed 5:00 blokuje automatyczny raport tego dnia (jeden raport na datę). Zastąpienie, które się nie uda, zostawia poprzedni raport bez zmian.
+
+## D19. Klucze API i API raportów
+
+- Klucz `mon_<8 znaków>_<sekret>` (32 losowe bajty, base64url); w bazie prefiks i SHA-256 sekretu, porównanie w czasie stałym; „ostatnie użycie” zapisywane najwyżej raz na minutę. Pełny klucz widać tylko raz (panel → Klucze API).
+- Schemat `ApiKey` (`Authorization: Bearer …`), polityki na zakresy `reports:write` i `mcp:read`, limit 60 zapytań/min na klucz (`/api/*`). Wymuszanie MFA dotyczy tylko sesji z ciasteczka logowania — programy z kluczem nie mają TOTP.
+- `GET /api/items/pending` — wpisy czekające na raport (z `item_id` i treścią do cytowania). `POST /api/reports?date=&replace=` — ten sam JSON co od Claude; cytat z `item_id` musi być dosłowny (inaczej 422 z listą błędów); cytat z samym `url` spoza wejścia → niezweryfikowany, raport „do weryfikacji” (R10); istniejący raport → 409, `replace=true` zastępuje (R6). Za zaraportowane uznawane są tylko wpisy użyte w cytatach albo na liście pominiętych.

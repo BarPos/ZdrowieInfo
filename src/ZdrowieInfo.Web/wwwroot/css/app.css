@@ -104,3 +104,37 @@ table.list td { padding: .5rem; border-bottom: 1px solid var(--border); }
 /* Panel: podgląd tekstu źródeł */
 .preview-text { white-space: pre-wrap; word-break: break-word; max-height: 28rem; overflow: auto; font-size: .85rem;
     background: var(--mud-palette-background-gray, #f5f5f5); padding: .75rem; border-radius: 6px; }
+
+/* Raporty */
+.report-list { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: .5rem; }
+.report-row { display: grid; grid-template-columns: 5.5rem 1fr; gap: .25rem .75rem; padding: .85rem 1rem; text-decoration: none; color: var(--text);
+    background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); }
+.report-row.empty { opacity: .75; }
+.report-date { color: var(--muted); font-variant-numeric: tabular-nums; }
+.report-title { font-weight: 600; }
+.report-badges { grid-column: 2; display: flex; flex-wrap: wrap; gap: .3rem; }
+.badge { display: inline-block; font-size: .75rem; font-weight: 600; padding: .1rem .5rem; border-radius: 999px; background: var(--bg); border: 1px solid var(--border); }
+.badge.critical { background: var(--err-bg); color: var(--err-text); border-color: transparent; }
+.badge.high { background: var(--warn-bg); color: var(--warn-text); border-color: transparent; }
+.badge.warn { background: var(--warn-bg); color: var(--warn-text); border-color: transparent; }
+.badge.muted { color: var(--muted); }
+.report-nav { display: flex; justify-content: space-between; margin-bottom: 1rem; }
+.summary { font-size: 1.05rem; }
+.findings { margin: 1.5rem 0; }
+.findings h2 { display: flex; align-items: center; gap: .5rem; border-bottom: 2px solid var(--border); padding-bottom: .3rem; }
+.findings h2 .count { font-size: .85rem; color: var(--muted); font-weight: 400; }
+.importance-critical h2 { border-color: var(--danger); }
+.importance-high h2 { border-color: #c98a00; }
+.finding { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 1rem; margin-bottom: .75rem; }
+.finding h3 { margin: .1rem 0 .5rem; font-size: 1.05rem; }
+.finding .category { margin: 0; font-size: .75rem; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
+.finding .action { background: var(--ok-bg); color: var(--ok-text); padding: .5rem .75rem; border-radius: 6px; }
+.citation { margin: .75rem 0 0; padding: .5rem .75rem; border-left: 3px solid var(--accent); background: var(--bg); font-style: italic; }
+.citation.unverified { border-left-color: #c98a00; }
+.citation footer { font-style: normal; font-size: .85rem; color: var(--muted); margin-top: .3rem; }
+details.card { margin: 1rem 0; }
+details.card summary { cursor: pointer; font-weight: 600; }
+.item-list { padding-left: 1.2rem; }
+.item-list li { margin: .35rem 0; }
+.small { font-size: .85rem; }
+.key-plain { word-break: break-all; user-select: all; }

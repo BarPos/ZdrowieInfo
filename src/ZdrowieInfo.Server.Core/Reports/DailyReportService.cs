@@ -1,0 +1,277 @@
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
+using ZdrowieInfo.Server.Common;
+using ZdrowieInfo.Server.Data;
+
+namespace ZdrowieInfo.Server.Reports;
+
+public enum ReportRunOutcome
+{
+    Created,
+    AlreadyExists,
+    /// <summary>Błąd przejściowy (API) – ponowić za 10 minut.</summary>
+    RetryLater,
+    /// <summary>Zastępowanie się nie udało – poprzedni raport zostaje bez zmian.</summary>
+    NotReplaced,
+}
+
+public sealed record ReportRunResult(ReportRunOutcome Outcome, long? ReportId = null, string? Error = null);
+
+public enum ExternalReportOutcome { Created, Conflict, Invalid }
+
+public sealed record ExternalReportResult(ExternalReportOutcome Outcome, long? ReportId, ReportStatus Status, IReadOnlyList<string> Errors);
+
+/// <summary>
+/// Jeden raport dziennie: „Brak zmian” bez wywołania API; z Claude, gdy są nowe wpisy (walidacja, jedna poprawka,
+/// potem „do weryfikacji”); awaryjny z listą wpisów, gdy analiza się nie uda.
+/// </summary>
+public sealed class DailyReportService(
+    IDbContextFactory<ZdrowieInfoDbContext> dbFactory,
+    IReportGenerator generator,
+    ReportSettings settings,
+    TimeProvider time,
+    ILogger<DailyReportService> logger)
+{
+    private readonly SemaphoreSlim _lock = new(1, 1);
+
+    /// <param name="replace">Zastępuje istniejący raport (wpisy z niego wracają do wejścia).</param>
+    /// <param name="finalAttempt">Przy błędzie przejściowym nie czekać – od razu raport awaryjny.</param>
+    public async Task<ReportRunResult> GenerateAsync(DateOnly date, bool replace = false, bool finalAttempt = true, CancellationToken ct = default)
+    {
+        await _lock.WaitAsync(ct);
+        try
+        {
+            await using var db = await dbFactory.CreateDbContextAsync(ct);
+            var existing = await db.Reports.AsNoTracking().SingleOrDefaultAsync(r => r.Date == date, ct);
+            if (existing is not null && !replace) return new ReportRunResult(ReportRunOutcome.AlreadyExists, existing.Id);
+            var replaceId = existing?.Id;
+
+            // Przy zastępowaniu wejście obejmuje też wpisy z obecnego raportu; stary raport znika dopiero razem z zapisem nowego.
+            var now = time.GetUtcNow();
+            var pending = await (from i in db.SourceItems.AsNoTracking()
+                                 join s in db.Sources on i.SourceId equals s.Id
+                                 where (i.ReportedAt == null || (replaceId != null && i.ReportId == replaceId)) && !i.IsBaseline
+                                 select new PendingItem(i, s.Name)).ToListAsync(ct);
+            var previous = await db.Reports.AsNoTracking().Where(r => r.Date < date).OrderByDescending(r => r.Date).Select(r => (DateTimeOffset?)r.CreatedAt).FirstOrDefaultAsync(ct);
+            var sourcesState = await SourcesStateBuilder.BuildAsync(db, previous ?? now.AddDays(-1), ct);
+
+            if (pending.Count == 0)
+            {
+                var empty = new Report
+                {
+                    Date = date,
+                    IsEmpty = true,
+                    Status = ReportStatus.Ready,
+                    Title = $"Brak zmian – {date:dd.MM.yyyy}",
+                    Summary = "W monitorowanych źródłach nie pojawiły się nowe wpisy.",
+                    Producer = "system",
+                    SourcesState = sourcesState,
+                    CreatedAt = now,
+                    UpdatedAt = now,
+                };
+                await SaveAsync(db, empty, [], now, ct, replaceId);
+                logger.LogInformation("Raport {Date}: brak zmian.", date);
+                return new ReportRunResult(ReportRunOutcome.Created, empty.Id);
+            }
+
+            var inputs = ReportComposer.BuildInputs(pending);
+            var profile = await settings.GetProfileAsync(ct);
+            var attempts = await settings.GetAttemptsAsync(ct);
+            var attemptNo = (attempts?.Date == date ? attempts.Attempts : 0) + 1;
+
+            Report report;
+            try
+            {
+                report = await AnalyzeAsync(date, profile, inputs, ct);
+            }
+            catch (ReportGenerationException e) when (e.Transient && !finalAttempt)
+            {
+                await settings.SetAttemptsAsync(new ReportAttempts(date, attemptNo, now, e.Message), ct);
+                logger.LogWarning("Raport {Date}: próba {Attempt} nieudana ({Error}) – ponowienie później.", date, attemptNo, e.Message);
+                return new ReportRunResult(ReportRunOutcome.RetryLater, Error: e.Message);
+            }
+            catch (ReportGenerationException e) when (replaceId is not null)
+            {
+                logger.LogError("Raport {Date}: ponowna analiza nieudana ({Error}) – poprzedni raport zostaje.", date, e.Message);
+                return new ReportRunResult(ReportRunOutcome.NotReplaced, replaceId, e.Message);
+            }
+            catch (ReportGenerationException e)
+            {
+                logger.LogError("Raport {Date}: analiza nieudana ({Error}) – raport awaryjny z listą wpisów.", date, e.Message);
+                report = new Report
+                {
+                    Date = date,
+                    Status = ReportStatus.AiError,
+                    Title = $"Wykryte zmiany bez analizy – {date:dd.MM.yyyy}",
+                    Summary = $"Nie udało się przygotować analizy ({e.Message}). Poniżej {inputs.Count} wykrytych wpisów do samodzielnego przejrzenia.",
+                    Producer = "system",
+                    Error = e.Message,
+                };
+            }
+
+            report.Date = date;
+            report.GenerationAttempts = attemptNo;
+            report.SourcesState = sourcesState;
+            report.CreatedAt = now;
+            report.UpdatedAt = now;
+            await SaveAsync(db, report, inputs.SelectMany(i => i.SourceItemIds), now, ct, replaceId);
+            logger.LogInformation("Raport {Date}: {Status}, {Findings} punktów, {Items} wpisów.", date, report.Status, report.Findings.Count, inputs.Count);
+            return new ReportRunResult(ReportRunOutcome.Created, report.Id);
+        }
+        finally
+        {
+            _lock.Release();
+        }
+    }
+
+    /// <summary>
+    /// Raport od zewnętrznego producenta (POST /api/reports). Cytaty z identyfikatorem wpisu muszą być dosłowne (inaczej 422);
+    /// cytaty z samym URL-em spoza wejścia są zapisywane jako niezweryfikowane, a raport dostaje status „do weryfikacji”.
+    /// Za zaraportowane uznawane są tylko wpisy użyte w cytatach albo na liście pominiętych.
+    /// </summary>
+    public async Task<ExternalReportResult> SaveExternalAsync(DateOnly date, ReportDocument document, string producer, bool replace, CancellationToken ct = default)
+    {
+        await _lock.WaitAsync(ct);
+        try
+        {
+            await using var db = await dbFactory.CreateDbContextAsync(ct);
+            var existing = await db.Reports.AsNoTracking().SingleOrDefaultAsync(r => r.Date == date, ct);
+            if (existing is not null && !replace) return new ExternalReportResult(ExternalReportOutcome.Conflict, existing.Id, existing.Status, []);
+
+            var pending = await (from i in db.SourceItems.AsNoTracking()
+                                 join s in db.Sources on i.SourceId equals s.Id
+                                 where (i.ReportedAt == null || (existing != null && i.ReportId == existing.Id)) && !i.IsBaseline
+                                 select new PendingItem(i, s.Name)).ToListAsync(ct);
+            var inputs = ReportComposer.BuildInputs(pending);
+            var validation = ReportValidator.Validate(document, inputs, requireCoverage: false, allowUrlCitations: true);
+            // Niepoprawny raport niczego nie zmienia – także przy replace=true.
+            if (!validation.IsValid) return new ExternalReportResult(ExternalReportOutcome.Invalid, null, ReportStatus.NeedsReview, validation.Errors);
+
+            var now = time.GetUtcNow();
+            var report = ToReport(document, validation, inputs);
+            var unverified = validation.Citations.Count(c => !c.Verified);
+            report.Date = date;
+            report.Status = unverified > 0 ? ReportStatus.NeedsReview : ReportStatus.Ready;
+            report.Producer = producer.Length > 100 ? producer[..100] : producer;
+            report.ValidationIssues = unverified > 0 ? [$"{unverified} cytatów spoza monitorowanych wpisów – niezweryfikowane."] : [];
+            var previous = await db.Reports.AsNoTracking().Where(r => r.Date < date).OrderByDescending(r => r.Date).Select(r => (DateTimeOffset?)r.CreatedAt).FirstOrDefaultAsync(ct);
+            report.SourcesState = await SourcesStateBuilder.BuildAsync(db, previous ?? now.AddDays(-1), ct);
+            report.CreatedAt = now;
+            report.UpdatedAt = now;
+
+            var covered = validation.Citations.Where(c => c.Item is not null).SelectMany(c => c.Item!.SourceItemIds)
+                .Concat(inputs.Where(i => document.Ignored.Any(g => g.ItemId == i.Id)).SelectMany(i => i.SourceItemIds));
+            await SaveAsync(db, report, covered, now, ct, existing?.Id);
+            logger.LogInformation("Raport {Date} od {Producer}: {Status}, {Findings} punktów.", date, producer, report.Status, report.Findings.Count);
+            return new ExternalReportResult(ExternalReportOutcome.Created, report.Id, report.Status, report.ValidationIssues);
+        }
+        finally
+        {
+            _lock.Release();
+        }
+    }
+
+    /// <summary>Analiza przez generator: walidacja, jedna poprawka z listą błędów, potem „do weryfikacji”.</summary>
+    private async Task<Report> AnalyzeAsync(DateOnly date, ClinicProfile profile, IReadOnlyList<ReportInputItem> inputs, CancellationToken ct)
+    {
+        var first = await generator.GenerateAsync(new GenerationRequest(date, profile, inputs), ct);
+        var usage = first.Usage;
+        var result = first;
+        var validation = ReportValidator.Validate(first.Document, inputs, requireCoverage: true);
+
+        if (!validation.IsValid)
+        {
+            logger.LogWarning("Raport {Date}: odpowiedź nie przeszła kontroli ({Count} uwag) – ponowienie z listą błędów.", date, validation.Errors.Count);
+            var second = await generator.GenerateAsync(new GenerationRequest(date, profile, inputs, validation.Errors), ct);
+            usage = Sum(usage, second.Usage);
+            var secondValidation = ReportValidator.Validate(second.Document, inputs, requireCoverage: true);
+            // Zostaje lepsza z dwóch odpowiedzi (mniej uwag).
+            if (secondValidation.Errors.Count <= validation.Errors.Count)
+            {
+                result = second;
+                validation = secondValidation;
+            }
+        }
+
+        // Pusta albo ucięta odpowiedź (np. limit tokenów przy wielu wpisach) to nie raport do weryfikacji – raport awaryjny z listą wpisów.
+        if (string.IsNullOrWhiteSpace(result.Document.Title) && result.Document.Findings.Count == 0 && result.Document.Ignored.Count == 0)
+            throw new ReportGenerationException("odpowiedź modelu była pusta albo ucięta (dwukrotnie)", transient: false);
+
+        var report = ToReport(result.Document, validation, inputs);
+        report.Status = validation.IsValid ? ReportStatus.Ready : ReportStatus.NeedsReview;
+        report.ValidationIssues = [.. validation.Errors];
+        report.Producer = generator.Name;
+        report.Model = result.Model;
+        report.AiUsage = usage;
+        return report;
+    }
+
+    /// <summary>Zamienia dokument na encje; cytaty dostają kopię tytułu, adresu i daty wpisu.</summary>
+    public static Report ToReport(ReportDocument document, ReportValidation validation, IReadOnlyList<ReportInputItem> inputs)
+    {
+        var report = new Report
+        {
+            Title = document.Title.Trim(),
+            Summary = document.Summary.Trim(),
+            Producer = "",
+            Body = document,
+        };
+        var order = 0;
+        foreach (var (finding, index) in document.Findings.Select((f, i) => (f, i))
+                     .OrderBy(x => ReportVocabulary.Importances.GetValueOrDefault(x.f.Importance, Importance.Low))
+                     .ThenBy(x => x.i))
+        {
+            var entity = new ReportFinding
+            {
+                Order = order++,
+                Importance = ReportVocabulary.Importances.GetValueOrDefault(finding.Importance, Importance.Low),
+                Category = ReportVocabulary.Categories.GetValueOrDefault(finding.Category, FindingCategory.Other),
+                Headline = finding.Headline.Trim(),
+                Body = finding.Body.Trim(),
+                Action = string.IsNullOrWhiteSpace(finding.Action) ? null : finding.Action.Trim(),
+            };
+            for (var c = 0; c < finding.Citations.Count; c++)
+            {
+                var citation = finding.Citations[c];
+                var check = validation.Citations.FirstOrDefault(x => x.Finding == index && x.Citation == c);
+                var item = check?.Item;
+                entity.Citations.Add(new FindingCitation
+                {
+                    SourceItemId = item?.SourceItemIds[0],
+                    Title = item?.Title ?? citation.Url ?? citation.ItemId ?? "",
+                    Url = item?.Url ?? citation.Url ?? "",
+                    PublishedOn = item?.PublishedOn,
+                    Quote = citation.Quote.Trim(),
+                    Verified = check?.Verified ?? false,
+                });
+            }
+            report.Findings.Add(entity);
+        }
+        return report;
+    }
+
+    /// <summary>
+    /// Zapis raportu i oznaczenie wpisów jako zaraportowanych – w jednej transakcji. Przy zastępowaniu stary raport jest
+    /// usuwany (a jego wpisy zwolnione) dopiero tutaj, razem z zapisem nowego.
+    /// </summary>
+    public static async Task SaveAsync(ZdrowieInfoDbContext db, Report report, IEnumerable<long> sourceItemIds, DateTimeOffset now, CancellationToken ct, long? replaceId = null)
+    {
+        var ids = sourceItemIds.Distinct().ToList();
+        await using var tx = await db.Database.BeginTransactionAsync(ct);
+        if (replaceId is not null)
+        {
+            await db.SourceItems.Where(i => i.ReportId == replaceId)
+                .ExecuteUpdateAsync(u => u.SetProperty(i => i.ReportId, (long?)null).SetProperty(i => i.ReportedAt, (DateTimeOffset?)null), ct);
+            await db.Reports.Where(r => r.Id == replaceId).ExecuteDeleteAsync(ct);
+        }
+        db.Reports.Add(report);
+        await db.SaveChangesAsync(ct);
+        await db.SourceItems.Where(i => ids.Contains(i.Id))
+            .ExecuteUpdateAsync(u => u.SetProperty(i => i.ReportId, report.Id).SetProperty(i => i.ReportedAt, now), ct);
+        await tx.CommitAsync(ct);
+    }
+
+    private static AiUsage Sum(AiUsage a, AiUsage b) =>
+        new(a.InputTokens + b.InputTokens, a.OutputTokens + b.OutputTokens, a.CacheReadTokens + b.CacheReadTokens, a.CacheWriteTokens + b.CacheWriteTokens, a.Calls + b.Calls);
+}

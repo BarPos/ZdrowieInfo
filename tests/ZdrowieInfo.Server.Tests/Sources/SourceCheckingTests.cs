@@ -322,6 +322,8 @@ public class SourceCheckingTests(PostgresFixture postgres)
 
         app.Http.Serve(NfzNews, html);
         await CheckAsync(app, source);
+        await using (var db = await app.DbAsync()) // wszystko już było w raporcie
+            await db.SourceItems.ExecuteUpdateAsync(u => u.SetProperty(i => i.ReportedAt, Start));
 
         app.Http.Serve(NfzNews, html.Replace(oldTitle, oldTitle + " [AKTUALIZACJA]"));
         app.Http.Serve(dilo, Fixtures.Read("nfz-aktualnosci", "detail.html"));
@@ -331,6 +333,8 @@ public class SourceCheckingTests(PostgresFixture postgres)
         var updated = (await ItemsAsync(app, "nfz-aktualnosci")).Single(i => i.UpdateCount == 1);
         Assert.Equal(oldTitle, updated.PreviousTitle);
         Assert.False(updated.IsBaseline);
+        Assert.Null(updated.ReportedAt); // aktualizacja wraca do najbliższego raportu
+        Assert.All((await ItemsAsync(app, "nfz-aktualnosci")).Where(i => i.UpdateCount == 0), i => Assert.NotNull(i.ReportedAt));
         Assert.NotNull(updated.Content);
     }
 

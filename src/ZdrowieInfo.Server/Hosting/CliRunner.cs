@@ -20,6 +20,8 @@ internal static class CliRunner
         if (command.Kind == CliCommandKind.CheckSources) return await SourceCli.TrySelectorsAsync(services, command.Login);
         if (command.Kind == CliCommandKind.CheckNow) return await SourceCli.CheckNowAsync(services, command.Login);
         if (command.Kind == CliCommandKind.ApplyDefaultSources) return await SourceCli.ApplyDefaultsAsync(services, command.Login);
+        if (command.Kind == CliCommandKind.GenerateReport) return await ReportCli.GenerateAsync(services, command.Login, command.Replace);
+        if (command.Kind == CliCommandKind.MarkReportedBefore) return await ReportCli.MarkReportedBeforeAsync(services, DateOnly.ParseExact(command.Login!, "yyyy-MM-dd"));
 
         await using var scope = services.CreateAsyncScope();
         var admin = scope.ServiceProvider.GetRequiredService<UserAdminService>();

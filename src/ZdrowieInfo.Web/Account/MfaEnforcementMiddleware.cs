@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Identity;
 using ZdrowieInfo.Server.Accounts;
 
 namespace ZdrowieInfo.Web.Account;
@@ -21,7 +22,9 @@ public sealed class MfaEnforcementMiddleware(RequestDelegate next)
     public Task InvokeAsync(HttpContext context)
     {
         var user = context.User;
+        // Tylko sesje z ciasteczka logowania. Programy z kluczem API nie mają TOTP – ich dostęp ogranicza zakres klucza.
         if (user.Identity?.IsAuthenticated == true
+            && user.Identity.AuthenticationType == IdentityConstants.ApplicationScheme
             && !user.HasClaim(MfaClaims.Enabled, "1")
             && !IsAllowed(context.Request.Path))
         {

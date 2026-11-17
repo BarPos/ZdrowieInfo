@@ -1,0 +1,89 @@
+@page "/panel/klucze"
+@rendermode InteractiveServer
+@using ZdrowieInfo.Server.ApiKeys
+@inject ApiKeyService Keys
+@inject ISnackbar Snackbar
+@inject IDialogService Dialogs
+
+<PageTitle>Klucze API – ZdrowieInfo</PageTitle>
+
+<AdminShell>
+    <MudText Typo="Typo.h4" Class="mb-2">Klucze API</MudText>
+    <MudText Typo="Typo.body2" Class="mb-4">
+        Dla programów i agentów AI: <code>Authorization: Bearer mon_…</code>. Zakres <b>reports:write</b> pozwala pobrać
+        wpisy czekające na raport (<code>GET /api/items/pending</code>) i dodać raport (<code>POST /api/reports</code>);
+        <b>mcp:read</b> – wyszukiwanie przez serwer MCP (etap 7).
+    </MudText>
+
+    <MudPaper Class="pa-4 mb-4" Elevation="1">
+        <MudText Typo="Typo.h6" Class="mb-2">Nowy klucz</MudText>
+        <MudStack Row="true" Spacing="3" AlignItems="AlignItems.Center" Wrap="Wrap.Wrap">
+            <MudTextField T="string" @bind-Value="name" Label="Nazwa (np. agent-raportow)" Style="min-width:260px" />
+            @foreach (var scope in ApiScopes.All)
+            {
+                <MudCheckBox T="bool" Value="scopes.Contains(scope)" ValueChanged="v => Toggle(scope, v)" Label="@scope" />
+            }
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" Disabled="string.IsNullOrWhiteSpace(name) || scopes.Count == 0" OnClick="Create">Utwórz</MudButton>
+        </MudStack>
+        @if (created is not null)
+        {
+            <MudAlert Severity="Severity.Success" Class="mt-3">
+                Klucz pokazujemy tylko teraz – skopiuj go w bezpieczne miejsce:<br />
+                <code class="key-plain">@created</code>
+            </MudAlert>
+        }
+    </MudPaper>
+
+    <MudSimpleTable Dense="true" Hover="true">
+        <thead><tr><th>Nazwa</th><th>Prefiks</th><th>Zakresy</th><th>Utworzony</th><th>Ostatnie użycie</th><th>Stan</th><th></th></tr></thead>
+        <tbody>
+            @foreach (var k in keys)
+            {
+                <tr>
+                    <td>@k.Name</td>
+                    <td><code>mon_@(k.Prefix)_…</code></td>
+                    <td>@string.Join(", ", k.Scopes)</td>
+                    <td>@Labels.Time(k.CreatedAt)</td>
+                    <td>@Labels.Time(k.LastUsedAt)</td>
+                    <td>@(k.RevokedAt is null ? "aktywny" : $"unieważniony {Labels.Time(k.RevokedAt)}")</td>
+                    <td>
+                        @if (k.RevokedAt is null)
+                        {
+                            <MudButton Size="Size.Small" Color="Color.Error" OnClick="() => Revoke(k)">Unieważnij</MudButton>
+                        }
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </MudSimpleTable>
+</AdminShell>
+
+@code {
+    private List<ApiKey> keys = [];
+    private string? name;
+    private HashSet<string> scopes = [ApiScopes.ReportsWrite];
+    private string? created;
+
+    protected override async Task OnInitializedAsync() => keys = await Keys.ListAsync();
+
+    private void Toggle(string scope, bool on)
+    {
+        if (on) scopes.Add(scope); else scopes.Remove(scope);
+    }
+
+    private async Task Create()
+    {
+        var result = await Keys.CreateAsync(name!, scopes);
+        created = result.PlainText;
+        name = null;
+        keys = await Keys.ListAsync();
+    }
+
+    private async Task Revoke(ApiKey key)
+    {
+        if (await Dialogs.ShowMessageBoxAsync("Unieważnić klucz?", $"Klucz „{key.Name}” przestanie działać od razu.", yesText: "Unieważnij", cancelText: "Anuluj") != true) return;
+        await Keys.RevokeAsync(key.Id);
+        keys = await Keys.ListAsync();
+        Snackbar.Add("Klucz unieważniony.", Severity.Info);
+    }
+}

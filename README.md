@@ -6,7 +6,7 @@ Aplikacja codziennie sprawdza publiczne strony NFZ, CeZ, MZ i CSIRT CeZ, wykrywa
 - Kolejność prac i stan etapów: [Plan implementacji ZdrowieInfo.md](Plan%20implementacji%20ZdrowieInfo.md)
 - Decyzje techniczne: [docs/decyzje.md](docs/decyzje.md)
 
-**Stan:** etap 1 (logowanie z TOTP i passkey, PWA, instalator) i etap 2 (23 źródła, wykrywanie zmian, incydenty, harmonogram 5:00, panel źródeł). Raporty z Claude: etap 3.
+**Stan:** etapy 1–3: logowanie z TOTP i passkey, PWA, instalator; 23 źródła z wykrywaniem zmian, incydentami i harmonogramem 5:00; raport dzienny z Claude od 5:30 (walidacja cytatów, ponowienia do 6:20, raport awaryjny), API dla zewnętrznych producentów raportów. Następne: powiadomienia push (etap 4).
 
 ## Układ repozytorium
 
@@ -87,9 +87,27 @@ cd /opt/zdrowieinfo && sudo -u zdrowieinfo env $(sudo grep -v '^#' /etc/zdrowiei
 | `--reset-mfa <login>` | awaryjnie: wyłącza TOTP, usuwa passkey, odblokowuje konto; zalogowane urządzenia wylogowane w ciągu 5 minut |
 | `--check-sources [slug]` | próba selektorów na żywych stronach, bez zapisu |
 | `--check-now [slug]` | sprawdza źródła teraz i zapisuje wynik (jak harmonogram) |
+| `--generate-report [rrrr-mm-dd] [--replace]` | przygotowuje raport dnia teraz (domyślnie dziś) |
+| `--mark-reported-before rrrr-mm-dd` | przy włączaniu raportów: starsze wpisy nie trafią do pierwszego raportu |
 | `--apply-default-sources [slug]` | przywraca adresy i selektory z listy domyślnej (np. po aktualizacji aplikacji); zmienione źródła dostają nowy stan bazowy |
 
 Rejestracja w aplikacji jest wyłączona.
+
+## Claude API i raporty
+
+Klucz Claude API wpisuje się w panelu (**Panel → Ustawienia**); jest zapisywany zaszyfrowany w bazie. Tam też model (domyślnie `claude-sonnet-5-5`), effort, profil przychodni (zakresy świadczeń, KSC, lista używanych systemów) i zużycie w miesiącu. Lokalnie (`Development`) raporty przygotowuje generator przykładowy bez Claude (`ZdrowieInfo:Reports:Generator = Sample`).
+
+Programy i agenci AI mogą dodawać raporty kluczem z zakresem `reports:write` (**Panel → Klucze API**):
+
+```bash
+curl -H "Authorization: Bearer mon_…" https://zdrowieinfo.example.pl/api/items/pending
+```
+
+```bash
+curl -X POST -H "Authorization: Bearer mon_…" -H "Content-Type: application/json" --data @raport.json "https://zdrowieinfo.example.pl/api/reports?date=2026-11-18"
+```
+
+Format raportu (`title`, `summary`, `findings[]` z `importance`, `category`, `headline`, `body`, `action`, `citations[]` z `item_id` i `quote`, `ignored[]`) — [docs/decyzje.md](docs/decyzje.md), D16–D19.
 
 ## Zmiana domeny
 

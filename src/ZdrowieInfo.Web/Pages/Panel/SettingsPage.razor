@@ -1,0 +1,200 @@
+@page "/panel/ustawienia"
+@rendermode InteractiveServer
+@using Microsoft.EntityFrameworkCore
+@using Microsoft.Extensions.Options
+@using ZdrowieInfo.Server.Common
+@using ZdrowieInfo.Server.Data
+@using ZdrowieInfo.Server.Reports
+@inject ReportSettings Settings
+@inject DailyReportService Reports
+@inject IOptions<ReportsOptions> ReportsOptions
+@inject IDbContextFactory<ZdrowieInfoDbContext> DbFactory
+@inject WarsawClock Clock
+@inject ISnackbar Snackbar
+@inject IDialogService Dialogs
+
+<PageTitle>Ustawienia – ZdrowieInfo</PageTitle>
+
+<AdminShell>
+    <MudText Typo="Typo.h4" Class="mb-4">Ustawienia</MudText>
+    @if (!loaded)
+    {
+        <MudProgressLinear Indeterminate="true" />
+    }
+    else
+    {
+        <MudGrid>
+            <MudItem xs="12" md="6">
+                <MudPaper Class="pa-4" Elevation="1">
+                    <MudText Typo="Typo.h6" Class="mb-2">Profil przychodni</MudText>
+                    <MudText Typo="Typo.body2" Class="mb-2">Trafia do Claude przy każdym raporcie i decyduje o ocenie ważności.</MudText>
+                    <MudText Typo="Typo.subtitle2">Zakresy świadczeń</MudText>
+                    @foreach (var service in ClinicProfile.KnownServices)
+                    {
+                        <MudCheckBox T="bool" Value="services.Contains(service)" ValueChanged="v => ToggleService(service, v)" Label="@service" Dense="true" />
+                    }
+                    <MudSwitch T="bool" @bind-Value="keyEntity" Color="Color.Primary" Label="Podmiot kluczowy w KSC" Class="mt-2" />
+                    <MudTextField T="string" @bind-Value="systems" Label="Używane systemy" Lines="5" AutoGrow="true" Class="mt-2"
+                                  HelperText="Po jednym w linii: system gabinetowy (nazwa, wersja), firewall, serwery, VPN, przeglądarki… Bez tej listy podatności dostają ważność średnią." />
+                    <MudTextField T="string" @bind-Value="notes" Label="Inne uwagi dla analizy" Lines="2" AutoGrow="true" Class="mt-2" />
+                    <MudButton Variant="Variant.Filled" Color="Color.Primary" Class="mt-3" OnClick="SaveProfile">Zapisz profil</MudButton>
+                </MudPaper>
+            </MudItem>
+
+            <MudItem xs="12" md="6">
+                <MudPaper Class="pa-4 mb-4" Elevation="1">
+                    <MudText Typo="Typo.h6" Class="mb-2">Claude API</MudText>
+                    @if (!usesClaude)
+                    {
+                        <MudAlert Severity="Severity.Info" Dense="true" Class="mb-2">Raporty przygotowuje generator przykładowy (ZdrowieInfo:Reports:Generator = Sample) – Claude nie jest wywoływany.</MudAlert>
+                    }
+                    <MudTextField T="string" @bind-Value="model" Label="Model" HelperText="Domyślnie claude-sonnet-5-5" />
+                    <MudSelect T="string" @bind-Value="effort" Label="Effort (głębokość analizy)" Class="mt-2">
+                        <MudSelectItem T="string" Value="@("low")">low – najtaniej</MudSelectItem>
+                        <MudSelectItem T="string" Value="@("medium")">medium (domyślnie)</MudSelectItem>
+                        <MudSelectItem T="string" Value="@("high")">high</MudSelectItem>
+                        <MudSelectItem T="string" Value="@("max")">max</MudSelectItem>
+                    </MudSelect>
+                    <MudButton Variant="Variant.Outlined" Class="mt-3" OnClick="SaveClaude">Zapisz model</MudButton>
+
+                    <MudDivider Class="my-4" />
+                    <MudText Typo="Typo.subtitle2">Klucz API</MudText>
+                    <MudText Typo="Typo.body2" Class="mb-2">@(hasKey ? $"Zapisany (…{keyHint}), zaszyfrowany w bazie." : "Brak klucza – raporty z nowymi wpisami będą bez analizy.")</MudText>
+                    <MudTextField T="string" @bind-Value="newKey" Label="Nowy klucz (sk-ant-…)" InputType="InputType.Password" />
+                    <MudStack Row="true" Spacing="2" Class="mt-2">
+                        <MudButton Variant="Variant.Outlined" Disabled="string.IsNullOrWhiteSpace(newKey)" OnClick="SaveKey">Zapisz klucz</MudButton>
+                        <MudButton Variant="Variant.Text" Color="Color.Error" Disabled="!hasKey" OnClick="ClearKey">Usuń klucz</MudButton>
+                    </MudStack>
+                </MudPaper>
+
+                <MudPaper Class="pa-4 mb-4" Elevation="1">
+                    <MudText Typo="Typo.h6" Class="mb-2">Zużycie w @Clock.Today.ToString("MMMM yyyy")</MudText>
+                    <MudText>@usageCalls wywołań · @usageIn.ToString("N0") tokenów wejścia · @usageOut.ToString("N0") tokenów wyjścia</MudText>
+                    <MudText Typo="Typo.body2">Szacunkowo ok. $@usageCost.ToString("0.00") (cennik Sonnet 5.5: $2 / $10 za mln tokenów). Kredyty z planu Max: 100–200 USD miesięcznie.</MudText>
+                </MudPaper>
+
+                <MudPaper Class="pa-4" Elevation="1">
+                    <MudText Typo="Typo.h6" Class="mb-2">Raport dzienny</MudText>
+                    <MudText Typo="Typo.body2" Class="mb-2">Automatycznie od @ReportsOptions.Value.ReportTime.ToString("HH:mm"); ponowienia co @ReportsOptions.Value.RetryInterval.TotalMinutes min do @ReportsOptions.Value.RetryUntil.ToString("HH:mm").</MudText>
+                    @if (attempts is not null && attempts.Date == Clock.Today)
+                    {
+                        <MudAlert Severity="Severity.Warning" Dense="true" Class="mb-2">Dziś @attempts.Attempts nieudanych prób, ostatnia @Labels.Time(attempts.LastAttemptAt): @attempts.LastError</MudAlert>
+                    }
+                    <MudStack Row="true" Spacing="2" Wrap="Wrap.Wrap">
+                        <MudButton Variant="Variant.Outlined" Disabled="busy" OnClick="() => Generate(false)">Przygotuj raport na dziś</MudButton>
+                        <MudButton Variant="Variant.Text" Color="Color.Warning" Disabled="busy" OnClick="() => Generate(true)">Przygotuj ponownie (zastąp)</MudButton>
+                    </MudStack>
+                    @if (busy) { <MudProgressLinear Indeterminate="true" Class="mt-2" /> }
+                </MudPaper>
+            </MudItem>
+        </MudGrid>
+    }
+</AdminShell>
+
+@code {
+    private bool loaded, busy, hasKey, usesClaude, keyEntity;
+    private List<string> services = [];
+    private string systems = "", model = "", effort = "medium", keyHint = "";
+    private string? notes, newKey;
+    private ReportAttempts? attempts;
+    private long usageIn, usageOut;
+    private int usageCalls;
+    private decimal usageCost;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var profile = await Settings.GetProfileAsync();
+        services = [.. profile.Services];
+        keyEntity = profile.KeyEntityKsc;
+        systems = profile.Systems;
+        notes = profile.Notes;
+        var claude = await Settings.GetClaudeAsync();
+        model = claude.Model;
+        effort = claude.Effort;
+        usesClaude = !string.Equals(ReportsOptions.Value.Generator, "Sample", StringComparison.OrdinalIgnoreCase);
+        await LoadKeyAsync();
+        await LoadUsageAsync();
+        attempts = await Settings.GetAttemptsAsync();
+        loaded = true;
+    }
+
+    private async Task LoadKeyAsync()
+    {
+        var key = await Settings.GetApiKeyAsync();
+        hasKey = !string.IsNullOrEmpty(key);
+        keyHint = hasKey ? key![^4..] : "";
+    }
+
+    private async Task LoadUsageAsync()
+    {
+        var month = new DateOnly(Clock.Today.Year, Clock.Today.Month, 1);
+        await using var db = await DbFactory.CreateDbContextAsync();
+        var usages = await db.Reports.AsNoTracking().Where(r => r.Date >= month && r.AiUsage != null).Select(r => r.AiUsage!).ToListAsync();
+        usageIn = usages.Sum(u => u.InputTokens + u.CacheReadTokens + u.CacheWriteTokens);
+        usageOut = usages.Sum(u => u.OutputTokens);
+        usageCalls = usages.Sum(u => u.Calls);
+        usageCost = usages.Sum(u => u.InputTokens * 2m + u.CacheWriteTokens * 2.5m + u.CacheReadTokens * 0.1m + u.OutputTokens * 10m) / 1_000_000m;
+    }
+
+    private void ToggleService(string service, bool on)
+    {
+        if (on && !services.Contains(service)) services.Add(service);
+        if (!on) services.Remove(service);
+    }
+
+    private async Task SaveProfile()
+    {
+        await Settings.SetProfileAsync(new ClinicProfile
+        {
+            Services = ClinicProfile.KnownServices.Where(services.Contains).ToList(),
+            KeyEntityKsc = keyEntity,
+            Systems = systems.Trim(),
+            Notes = string.IsNullOrWhiteSpace(notes) ? null : notes.Trim(),
+        });
+        Snackbar.Add("Zapisano profil przychodni.", Severity.Success);
+    }
+
+    private async Task SaveClaude()
+    {
+        await Settings.SetClaudeAsync(new ClaudeSettings { Model = string.IsNullOrWhiteSpace(model) ? new ClaudeSettings().Model : model.Trim(), Effort = effort });
+        Snackbar.Add("Zapisano ustawienia modelu.", Severity.Success);
+    }
+
+    private async Task SaveKey()
+    {
+        if (string.IsNullOrWhiteSpace(newKey)) return;
+        await Settings.SetApiKeyAsync(newKey);
+        newKey = null;
+        await LoadKeyAsync();
+        Snackbar.Add("Zapisano klucz Claude API.", Severity.Success);
+    }
+
+    private async Task ClearKey()
+    {
+        if (await Dialogs.ShowMessageBoxAsync("Usunąć klucz?", "Bez klucza raporty z nowymi wpisami będą bez analizy.", yesText: "Usuń", cancelText: "Anuluj") != true) return;
+        await Settings.ClearApiKeyAsync();
+        await LoadKeyAsync();
+        Snackbar.Add("Usunięto klucz.", Severity.Info);
+    }
+
+    private async Task Generate(bool replace)
+    {
+        if (replace && await Dialogs.ShowMessageBoxAsync("Zastąpić dzisiejszy raport?", "Wpisy z obecnego raportu zostaną przeanalizowane od nowa (to kolejne wywołanie Claude).", yesText: "Zastąp", cancelText: "Anuluj") != true)
+            return;
+        busy = true;
+        try
+        {
+            var result = await Reports.GenerateAsync(Clock.Today, replace, finalAttempt: true);
+            Snackbar.Add(result.Outcome switch
+            {
+                ReportRunOutcome.AlreadyExists => "Raport na dziś już istnieje – użyj „Przygotuj ponownie”.",
+                ReportRunOutcome.Created => "Raport gotowy.",
+                ReportRunOutcome.NotReplaced => $"Nie udało się przygotować nowego raportu ({result.Error}) – poprzedni zostaje.",
+                _ => $"Nie udało się: {result.Error}",
+            }, result.Outcome == ReportRunOutcome.Created ? Severity.Success : Severity.Warning);
+            attempts = await Settings.GetAttemptsAsync();
+            await LoadUsageAsync();
+        }
+        finally { busy = false; }
+    }
+}

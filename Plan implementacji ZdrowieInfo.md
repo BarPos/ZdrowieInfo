@@ -185,6 +185,8 @@ Gotowe, gdy: przez tydzień na VPS wykrywa nowe wpisy bez fałszywych alarmów (
 
 ### Etap 3 — Raporty dzienne z Claude (L)
 
+**Kod gotowy 17.11.2026** — [docs/decyzje.md](docs/decyzje.md) (D16–D19). Sprawdzone z generatorem przykładowym i w testach; wywołanie prawdziwego Claude API po wpisaniu klucza (od 18.11.2026).
+
 **3a. Model i kontrakt**
 
 1. Migracja: `reports` (unikalna data), `report_findings`, `finding_citations`, `api_keys`.

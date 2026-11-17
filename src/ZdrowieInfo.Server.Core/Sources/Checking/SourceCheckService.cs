@@ -202,6 +202,8 @@ public sealed class SourceCheckService(
                 known.DetailFetchedAt = null;
                 known.DetailAttempts = 0;
                 known.DetailError = null;
+                known.ReportedAt = null; // aktualizacja wraca do najbliższego raportu
+                known.ReportId = null;
                 changes++;
                 continue;
             }

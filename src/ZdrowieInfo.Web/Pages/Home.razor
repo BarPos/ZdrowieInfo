@@ -1,9 +1,56 @@
 @page "/"
+@using Microsoft.EntityFrameworkCore
+@using ZdrowieInfo.Server.Data
+@using ZdrowieInfo.Server.Reports
+@inject IDbContextFactory<ZdrowieInfoDbContext> DbFactory
 
 <PageTitle>Raporty – ZdrowieInfo</PageTitle>
 
 <h1>Raporty</h1>
-<section class="card">
-    <p>Tu pojawi się lista raportów dziennych (etap 3).</p>
-    <p class="muted">Źródła i wykrywanie zmian powstają w etapie 2.</p>
-</section>
+@if (rows.Count == 0)
+{
+    <section class="card">
+        <p>Nie ma jeszcze raportów. Pierwszy powstanie jutro rano (przed 6:30), po pierwszym sprawdzeniu źródeł.</p>
+    </section>
+}
+else
+{
+    <ul class="report-list">
+        @foreach (var r in rows)
+        {
+            <li>
+                <a href="raporty/@r.Date.ToString("yyyy-MM-dd")" class="report-row @(r.IsEmpty ? "empty" : "")">
+                    <span class="report-date">@r.Date.ToString("ddd d.MM")</span>
+                    <span class="report-title">@r.Title</span>
+                    <span class="report-badges">
+                        @if (r.Critical > 0) { <span class="badge critical">@r.Critical krytyczne</span> }
+                        @if (r.High > 0) { <span class="badge high">@r.High wysokie</span> }
+                        @if (r.Status == ReportStatus.NeedsReview) { <span class="badge warn">do weryfikacji</span> }
+                        @if (r.Status == ReportStatus.AiError) { <span class="badge warn">bez analizy</span> }
+                        @if (r.IsEmpty) { <span class="badge muted">brak zmian</span> }
+                        @if (r.SourceProblems > 0) { <span class="badge warn">źródła: @r.SourceProblems</span> }
+                    </span>
+                </a>
+            </li>
+        }
+    </ul>
+}
+
+@code {
+    private sealed record Row(DateOnly Date, string Title, bool IsEmpty, ReportStatus Status, int Critical, int High, int SourceProblems);
+
+    private List<Row> rows = [];
+
+    protected override async Task OnInitializedAsync()
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        var reports = await db.Reports.AsNoTracking().OrderByDescending(r => r.Date).Take(90)
+            .Select(r => new
+            {
+                r.Date, r.Title, r.IsEmpty, r.Status, r.SourcesState,
+                Critical = r.Findings.Count(f => f.Importance == Importance.Critical),
+                High = r.Findings.Count(f => f.Importance == Importance.High),
+            }).ToListAsync();
+        rows = reports.Select(r => new Row(r.Date, r.Title, r.IsEmpty, r.Status, r.Critical, r.High, r.SourcesState.Count(s => !s.Ok || s.Warning != null))).ToList();
+    }
+}

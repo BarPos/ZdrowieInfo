@@ -13,6 +13,7 @@ using ZdrowieInfo.Server.Pwa;
 using ZdrowieInfo.Server.Push;
 using ZdrowieInfo.Server.Reports;
 using ZdrowieInfo.Server.Sources;
+using ZdrowieInfo.Server.Updates;
 using ZdrowieInfo.Web;
 
 var culture = CultureInfo.GetCultureInfo("pl-PL");
@@ -49,6 +50,7 @@ builder.Services.AddApiKeys();
 builder.Services.AddReportExport(builder.Configuration);
 builder.Services.AddPush();
 builder.Services.AddZdrowieInfoMcp();
+builder.Services.AddUpdates(builder.Configuration);
 builder.Services.AddZdrowieInfoWeb();
 builder.Services.AddHealthChecks();
 
@@ -94,7 +96,16 @@ app.UseAntiforgery();
 
 app.MapStaticAssets().AllowAnonymous();
 app.MapServiceWorker();
-app.MapHealthChecks("/healthz").AllowAnonymous();
+// update.sh i install.sh uznają nową wersję za działającą, gdy /healthz odpowiada i podaje tę wersję.
+app.MapHealthChecks("/healthz", new Microsoft.AspNetCore.Diagnostics.HealthChecks.HealthCheckOptions
+{
+    ResponseWriter = (context, report) =>
+    {
+        context.Response.ContentType = "application/json; charset=utf-8";
+        context.Response.Headers.CacheControl = "no-store";
+        return context.Response.WriteAsync(System.Text.Json.JsonSerializer.Serialize(new { status = report.Status.ToString(), version = AppVersion.Current }));
+    },
+}).AllowAnonymous();
 app.MapZdrowieInfoWeb();
 app.MapReportsApi();
 app.MapReportFiles();

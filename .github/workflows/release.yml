@@ -1,0 +1,84 @@
+# Wydanie (uruchamiane ręcznie: Actions → release → Run workflow).
+# Uruchamia workflow build (testy, paczki x64 i arm64), potem tworzy tag v<wersja> na wybranym commicie i publikuje
+# wydanie GitHub z plikami:
+#   ZdrowieInfo.Server-<wersja>-linux-x64.tar.gz, ZdrowieInfo.Server-<wersja>-linux-arm64.tar.gz, install.sh, SHA256SUMS.txt
+# Z tych wydań korzystają install.sh (GITHUB_REPOSITORY) i aktualizacja w panelu (ZdrowieInfo:Updates:GitHubRepository).
+# Wersja: <Version> w Directory.Build.props i AppVersion.Current – podnieś obie i zatwierdź przed wydaniem.
+# Wydania nie są podpisywane: SHA256SUMS.txt wykrywa uszkodzone pobranie, nie przejęte repozytorium.
+name: release
+
+on:
+  workflow_dispatch:
+    inputs:
+      prerelease:
+        description: "Wydanie próbne (serwery z kanałem stable je pomijają)"
+        type: boolean
+        default: false
+      draft:
+        description: "Szkic (opublikujesz ręcznie)"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  preflight:
+    name: Tag nie może istnieć
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+      - shell: bash
+        run: |
+          set -euo pipefail
+          version="$(sed -n 's:.*<Version>\([^<]*\)</Version>.*:\1:p' Directory.Build.props | head -n1)"
+          if git ls-remote --exit-code --tags origin "refs/tags/v$version" >/dev/null; then
+            echo "::error::tag v$version już istnieje: podnieś <Version> w Directory.Build.props i AppVersion.Current"
+            exit 1
+          fi
+          echo "Wydanie $version z ${GITHUB_SHA}" >> "$GITHUB_STEP_SUMMARY"
+
+  build:
+    name: Budowanie i testy
+    needs: preflight
+    uses: ./.github/workflows/build.yml
+
+  release:
+    name: Wydanie GitHub
+    needs: build
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          path: assets
+          merge-multiple: true
+      - name: SHA256SUMS.txt dla wszystkich plików
+        shell: bash
+        working-directory: assets
+        run: |
+          set -euo pipefail
+          v='${{ needs.build.outputs.version }}'
+          files=("ZdrowieInfo.Server-$v-linux-x64.tar.gz" "ZdrowieInfo.Server-$v-linux-arm64.tar.gz" install.sh)
+          for f in "${files[@]}"; do test -f "$f" || { echo "::error::brak pliku $f"; exit 1; }; done
+          sha256sum "${files[@]}" > SHA256SUMS.txt
+          cat SHA256SUMS.txt
+      - name: Utworzenie wydania
+        shell: bash
+        working-directory: assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          v='${{ needs.build.outputs.version }}'
+          flags=()
+          [[ "${{ inputs.prerelease }}" == "true" ]] && flags+=(--prerelease)
+          [[ "${{ inputs.draft }}" == "true" ]] && flags+=(--draft)
+          gh release create "v$v" --target "$GITHUB_SHA" --title "ZdrowieInfo $v" --generate-notes "${flags[@]}" \
+            "ZdrowieInfo.Server-$v-linux-x64.tar.gz" "ZdrowieInfo.Server-$v-linux-arm64.tar.gz" install.sh SHA256SUMS.txt

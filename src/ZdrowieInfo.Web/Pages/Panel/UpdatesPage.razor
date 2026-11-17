@@ -1,0 +1,156 @@
+@page "/panel/aktualizacje"
+@rendermode InteractiveServer
+@implements IDisposable
+@using ZdrowieInfo.Server.Common
+@using ZdrowieInfo.Server.Updates
+@inject ServerUpdateService Updates
+@inject AuthenticationStateProvider AuthState
+@inject ISnackbar Snackbar
+@inject IDialogService Dialogs
+
+<PageTitle>Aktualizacje – ZdrowieInfo</PageTitle>
+
+<AdminShell>
+    <MudText Typo="Typo.h4" Class="mb-2">Aktualizacje</MudText>
+    @if (status is null)
+    {
+        <MudProgressLinear Indeterminate="true" />
+    }
+    else
+    {
+        <MudPaper Class="pa-4 mb-4" Elevation="1">
+            <MudText Typo="Typo.subtitle2">Działająca wersja</MudText>
+            <MudText Typo="Typo.h5" Class="mb-2">@status.CurrentVersion</MudText>
+            @if (!status.Configured)
+            {
+                <MudAlert Severity="Severity.Info">
+                    Aktualizacje nie są skonfigurowane – serwer nie łączy się z GitHubem. Repozytorium wydań wpisuje install.sh
+                    (<code>ZdrowieInfo__Updates__GitHubRepository</code> w <code>/opt/zdrowieinfo/config/zdrowieinfo.env</code>).
+                </MudAlert>
+            }
+            else
+            {
+                <MudText Typo="Typo.body2" Class="mb-2">
+                    Ostatnie sprawdzenie: @(status.LastCheckedAt is { } c ? Labels.Time(c) : "jeszcze nie") (co 24 godziny)
+                    @if (status.LastCheckError is not null) { <span> – błąd: @status.LastCheckError</span> }
+                </MudText>
+                <MudStack Row="true" Spacing="2" Wrap="Wrap.Wrap">
+                    <MudButton Variant="Variant.Outlined" Color="Color.Primary" Disabled="busy" OnClick="Check">Sprawdź teraz</MudButton>
+                    @if (status.UpdateAvailable)
+                    {
+                        <MudButton Variant="Variant.Filled" Color="Color.Primary" Disabled="busy || !status.SelfUpdateSupported || Pending" OnClick="Update">
+                            Aktualizuj do @status.Latest!.Version
+                        </MudButton>
+                    }
+                </MudStack>
+                @if (status.UpdateAvailable && !status.SelfUpdateSupported)
+                {
+                    <MudAlert Severity="Severity.Warning" Class="mt-3">
+                        @status.UnsupportedReason Na serwerze z install.sh: <code>sudo bash install.sh --upgrade --version @status.Latest!.Version</code>.
+                    </MudAlert>
+                }
+            }
+        </MudPaper>
+
+        @if (status.Latest is { } latest)
+        {
+            <MudPaper Class="pa-4 mb-4" Elevation="1">
+                <MudText Typo="Typo.h6">
+                    Najnowsze wydanie: @latest.Version@(latest.Prerelease ? " (próbne)" : "")
+                    @if (!status.UpdateAvailable) { <MudChip T="string" Size="Size.Small" Color="Color.Success">aktualna</MudChip> }
+                </MudText>
+                <MudText Typo="Typo.body2" Class="mb-2">
+                    @(latest.PublishedAt is { } p ? Labels.Time(p) : "")
+                    @if (latest.Url is not null) { <span> · </span><MudLink Href="@latest.Url" Target="_blank">na GitHubie</MudLink> }
+                </MudText>
+                @if (!string.IsNullOrWhiteSpace(latest.Notes))
+                {
+                    <pre class="release-notes">@latest.Notes</pre>
+                }
+            </MudPaper>
+        }
+
+        <MudText Typo="Typo.body2" Class="mb-2">
+            Aktualizacja: serwer pobiera paczkę i sprawdza SHA-256, a update.sh (jako root) zatrzymuje usługę, robi kopię bazy,
+            stosuje migracje i uruchamia nową wersję. Jeśli nowa wersja nie odpowie w ciągu 2 minut – przywraca bazę i poprzednią wersję.
+            Przerwa trwa zwykle kilkadziesiąt sekund; panel połączy się ponownie sam.
+        </MudText>
+
+        @if (status.Runs.Count > 0)
+        {
+            <MudSimpleTable Dense="true">
+                <thead><tr><th>Zlecono</th><th>Wersje</th><th>Kto</th><th>Stan</th><th>Szczegóły</th></tr></thead>
+                <tbody>
+                    @foreach (var run in status.Runs)
+                    {
+                        <tr>
+                            <td>@Labels.Time(run.RequestedAt)</td>
+                            <td>@run.FromVersion → @run.ToVersion</td>
+                            <td>@run.RequestedBy</td>
+                            <td>@StateLabel(run.State)</td>
+                            <td>@run.Message</td>
+                        </tr>
+                    }
+                </tbody>
+            </MudSimpleTable>
+        }
+    }
+</AdminShell>
+
+@code {
+    private ServerUpdateStatus? status;
+    private bool busy;
+    private string login = "";
+    private Timer? timer;
+
+    private bool Pending => status?.Runs.Any(r => r.State is ServerUpdateState.Downloading or ServerUpdateState.Staged) == true;
+
+    protected override async Task OnInitializedAsync()
+    {
+        login = (await AuthState.GetAuthenticationStateAsync()).User.Identity?.Name ?? "";
+        status = await Updates.GetStatusAsync();
+        // W trakcie aktualizacji odświeżanie co 5 s (po restarcie panel łączy się ponownie i pokazuje wynik).
+        timer = new Timer(_ => InvokeAsync(async () =>
+        {
+            if (!Pending) return;
+            status = await Updates.GetStatusAsync();
+            StateHasChanged();
+        }), null, TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(5));
+    }
+
+    public void Dispose() => timer?.Dispose();
+
+    private static string StateLabel(ServerUpdateState state) => state switch
+    {
+        ServerUpdateState.Downloading => "pobieranie",
+        ServerUpdateState.Staged => "instalowanie",
+        ServerUpdateState.Succeeded => "zakończona",
+        ServerUpdateState.RolledBack => "wycofana",
+        _ => "nieudana",
+    };
+
+    private async Task Check()
+    {
+        busy = true;
+        try { status = await Updates.CheckNowAsync(); }
+        finally { busy = false; }
+    }
+
+    private async Task Update()
+    {
+        var version = status!.Latest!.Version;
+        if (await Dialogs.ShowMessageBoxAsync($"Zaktualizować do {version}?",
+                "Serwer pobierze nową wersję, zrobi kopię bazy, zastosuje migracje i uruchomi się ponownie (przerwa zwykle poniżej minuty). " +
+                "Jeśli nowa wersja nie zadziała, wróci poprzednia razem z bazą.",
+                yesText: "Aktualizuj", cancelText: "Anuluj") != true) return;
+        busy = true;
+        try
+        {
+            var result = await Updates.UpdateNowAsync(login);
+            if (result.Ok) Snackbar.Add("Wersja pobrana – trwa instalacja. Za chwilę serwer uruchomi się ponownie.", Severity.Info);
+            else Snackbar.Add(result.Error!, Severity.Error);
+            status = await Updates.GetStatusAsync();
+        }
+        finally { busy = false; }
+    }
+}

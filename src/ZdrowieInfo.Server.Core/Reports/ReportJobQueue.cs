@@ -43,6 +43,12 @@ public sealed class ReportJobQueue(DailyReportService reports, TimeProvider time
         get { lock (_gate) return [.. _history]; }
     }
 
+    /// <summary>Zlecenie czeka w kolejce albo trwa.</summary>
+    public bool HasPending
+    {
+        get { lock (_gate) return _history.Any(j => j.State is ReportJobState.Queued or ReportJobState.Running); }
+    }
+
     public ReportJob Enqueue(DateOnly from, DateOnly to, bool replace, string requestedBy)
     {
         var job = new ReportJob(from, to, replace, requestedBy, time.GetUtcNow());

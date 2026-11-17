@@ -243,3 +243,6 @@ table.incidents .details { max-width: 28rem; color: var(--muted); }
 .danger-zone { margin-top: 1.25rem; border-top: 1px solid var(--border); padding-top: .75rem; }
 .danger-zone summary { cursor: pointer; color: var(--danger); font-weight: 600; }
 @media print { .doc-admin { display: none; } }
+
+/* Opis wydania w panelu (Aktualizacje). */
+.release-notes { white-space: pre-wrap; font-size: .85rem; max-height: 20rem; overflow: auto; margin: 0; }

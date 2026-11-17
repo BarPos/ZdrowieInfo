@@ -6,7 +6,7 @@ Aplikacja codziennie sprawdza publiczne strony NFZ, CeZ, MZ i CSIRT CeZ, wykrywa
 - Kolejność prac i stan etapów: [Plan implementacji ZdrowieInfo.md](Plan%20implementacji%20ZdrowieInfo.md)
 - Decyzje techniczne: [docs/decyzje.md](docs/decyzje.md)
 
-**Stan:** etapy 1–7 (kod): logowanie z TOTP i passkey, PWA, instalator; 23 źródła z wykrywaniem zmian, incydentami i harmonogramem 5:00; raport dzienny z Claude od 5:30 (walidacja cytatów, ponowienia do 6:20, raport awaryjny), API dla zewnętrznych producentów raportów; powiadomienia push i dziennik incydentów; PDF z LaTeX-a; wyszukiwanie; serwer MCP; role administrator/użytkownik, raporty wstecz i okresowe, publiczne linki do PDF. Do sprawdzenia na żywo: Claude API (od 18.11.2026) i push na iPhonie.
+**Stan:** etapy 1–7 (kod): logowanie z TOTP i passkey, PWA, instalator; 23 źródła z wykrywaniem zmian, incydentami i harmonogramem 5:00; raport dzienny z Claude od 5:30 (walidacja cytatów, ponowienia do 6:20, raport awaryjny), API dla zewnętrznych producentów raportów; powiadomienia push i dziennik incydentów; PDF z LaTeX-a; wyszukiwanie; serwer MCP; role administrator/użytkownik, raporty wstecz i okresowe, publiczne linki do PDF; instalator, wydania na GitHubie i aktualizacja z panelu. Do sprawdzenia na żywo: Claude API (od 18.11.2026) i push na iPhonie.
 
 ## Układ repozytorium
 
@@ -16,9 +16,10 @@ Aplikacja codziennie sprawdza publiczne strony NFZ, CeZ, MZ i CSIRT CeZ, wykrywa
 | `src/ZdrowieInfo.Server.Core` | logika w obszarach (`Common`, `Data`, `Accounts`, `Sources`, `Reports`, `Export`, `Push`, `Search`, `Mcp`, …), każdy z `AddXxx()` |
 | `src/ZdrowieInfo.Web` | Razor class library: strony czytelnika i kont (static SSR), panel (InteractiveServer + MudBlazor) |
 | `tests/ZdrowieInfo.Server.Tests` | xUnit v3; testy integracyjne na PostgreSQL w Testcontainers |
-| `deploy/linux` | jednostka systemd, `install.sh`, kopie zapasowe |
+| `deploy/linux` | `install.sh`, `update.sh`, `backup.sh`, jednostki systemd, testy skryptów |
 | `deploy/dev` | PostgreSQL do pracy lokalnej |
-| `build/build-server.sh` | paczka self-contained linux-x64 |
+| `build/build-server.sh` | paczki wydania (linux-x64, linux-arm64), `install.sh` i `SHA256SUMS.txt` |
+| `.github/workflows` | `build` (testy, paczki) i `release` (wydanie GitHub) – uruchamiane ręcznie |
 
 ## Praca lokalna
 
@@ -50,33 +51,92 @@ Nowa migracja:
 dotnet ef migrations add <Nazwa> --project src/ZdrowieInfo.Server --output-dir Data/Migrations
 ```
 
-## Wdrożenie (Ubuntu 24.04, x64)
+## Wdrożenie (Ubuntu 24.04+, x64 albo arm64)
 
-1. Zbuduj paczkę: `./build/build-server.sh` → `artifacts/zdrowieinfo-<wersja>-linux-x64.tar.gz` (uruchamia też testy).
-2. Na serwerze rozpakuj i uruchom:
+Instalacja, aktualizacje i kopie działają jak w DomainNotice: wydania na GitHubie (paczki dla x64 i arm64, `install.sh`, `SHA256SUMS.txt`), instalator na serwerze, aktualizacja z panelu przez `update.sh` (root) z kopią bazy i wycofaniem. Bez Dockera i bez .NET na serwerze (program jest self-contained). Szczegóły: [docs/decyzje.md](docs/decyzje.md), D32.
 
-   ```bash
-   sudo ./install.sh --public-url https://zdrowieinfo.example.pl
-   ```
+### Instalacja
 
-   Instalator: instaluje PostgreSQL, tworzy użytkownika systemowego `zdrowieinfo`, bazę z losowym hasłem, `/etc/zdrowieinfo/zdrowieinfo.env`, stosuje migracje, uruchamia usługę i codzienną kopię zapasową, na końcu pyta o login pierwszego konta.
-3. Reverse proxy (po Twojej stronie): HTTPS → `http://127.0.0.1:5180`, z nagłówkami `Host`, `X-Forwarded-For`, `X-Forwarded-Proto`. Proxy na innej maszynie: ustaw `ZdrowieInfo__TrustedProxies__0` i `ASPNETCORE_URLS` w pliku env.
+Z wydania (repozytorium wydań jest wpisane w `install.sh`):
 
-Aktualizacja: rozpakuj nową paczkę i uruchom `sudo ./install.sh` bez argumentów.
+```bash
+curl -fsSLO https://github.com/BarPos/ZdrowieInfo/releases/latest/download/install.sh
+```
+
+```bash
+sudo bash install.sh
+```
+
+Instalator pyta o publiczny adres (`https://…`), bazę (PostgreSQL na tym serwerze – instalowany, gdy go nie ma; istniejący jest współdzielony: ZdrowieInfo dodaje tylko własną rolę i bazę – albo PostgreSQL gdzie indziej) i pierwsze konto (administrator). Pobiera paczkę dla tego procesora, sprawdza ją z `SHA256SUMS.txt`, instaluje pakiety (ICU, klient PostgreSQL, TeX do PDF), tworzy użytkownika `zdrowieinfo`, stosuje migracje, uruchamia usługę i codzienną kopię zapasową. Inne źródło paczki: `--version X.Y.Z` albo `--package ZdrowieInfo.Server-<wersja>-linux-<arch>.tar.gz` (bez internetu; sprawdzana z `SHA256SUMS.txt` obok).
+
+Bez pytań (np. z Ansible):
+
+```bash
+sudo ZDROWIEINFO_ADMIN_PASSWORD='…' bash install.sh --unattended --db=local --public-url https://zdrowieinfo.example.pl --admin-user admin
+```
+
+Wszystkie opcje: `bash install.sh --help` (m.in. `--port`, `--listen` i `--trusted-proxy` dla reverse proxy na innej maszynie, `--contact-email`, `--no-pdf`, `--db=existing` z `--db-host`…). Hasła nigdy nie są argumentami: `--secrets-file`, `--secrets-stdin`, zmienne `ZDROWIEINFO_ADMIN_PASSWORD` / `ZDROWIEINFO_DB_PASSWORD` albo pytanie.
+
+Reverse proxy (po Twojej stronie): HTTPS → `http://127.0.0.1:5180`, z nagłówkami `Host`, `X-Forwarded-For`, `X-Forwarded-Proto` i obsługą WebSocket (panel to Blazor Server).
+
+**PostgreSQL używany przez inne aplikacje** (`--db=local`, gdy PostgreSQL już jest): instalator tylko dodaje nową rolę i bazę (`zdrowieinfo`, a gdy ta nazwa jest zajęta – `zdrowieinfo_2`…; istniejąca rola czy baza nigdy nie jest zmieniana ani przejmowana). Rola nie ma uprawnień superużytkownika ani tworzenia baz i ról, a do jej bazy łączy się tylko ona. PostgreSQL nie jest instalowany, aktualizowany, konfigurowany (`postgresql.conf`, `pg_hba.conf`) ani restartowany, a zainstalowane pakiety nie są aktualizowane; klaster starszy niż 16 – odmowa. Przy kilku klastrach wybierz jeden przez `--db-port`. Nieudana instalacja usuwa tylko utworzone przez siebie rolę i bazę; kopia, przywracanie, wycofanie aktualizacji i odinstalowanie działają wyłącznie na bazie ZdrowieInfo.
+
+Serwer zainstalowany poprzednim skryptem (`/etc/zdrowieinfo`, `/var/lib/zdrowieinfo`) nie jest przenoszony automatycznie – instalator zatrzymuje się z komunikatem.
+
+### Aktualizacje
+
+**Panel → Aktualizacje**: działająca wersja, najnowsze wydanie z opisem, *Sprawdź teraz* i *Aktualizuj do …* (serwer sprawdza wydania co 24 godziny). Serwer pobiera paczkę, sprawdza SHA-256 i zostawia zlecenie; `update.sh` (jako root, przez `zdrowieinfo-update.path`) zatrzymuje usługę, robi kopię bazy, stosuje migracje i uruchamia nową wersję. Gdy `/healthz` nie poda nowej wersji w ciągu 2 minut – przywraca bazę i poprzednią wersję. Zostają 3 ostatnie wersje. W trakcie przygotowywania raportu albo sprawdzania źródeł aktualizacja jest odrzucana z komunikatem – spróbuj, gdy się skończą.
+
+Z wiersza poleceń (to samo przez `update.sh`):
+
+```bash
+sudo bash install.sh --upgrade --version X.Y.Z
+```
+
+`update.sh`, `backup.sh` i jednostki systemd (uruchamiane jako root) nie są wymieniane aktualizacją z panelu – tylko przez `install.sh --upgrade` albo `install.sh --repair --version X.Y.Z` z paczki podanej przez administratora.
+
+### Konserwacja
+
+Ponowne `sudo bash install.sh` na zainstalowanym serwerze pokazuje menu; każda pozycja ma też opcję:
+
+| Polecenie | |
+| --- | --- |
+| `install.sh --repair` | właściciele, prawa i usługi; konfiguracja i dane zostają |
+| `install.sh --backup [--output ŚCIEŻKA]` | kopia: baza, konfiguracja, klucze, dane, program (codziennie o 3:30 automatycznie, 14 ostatnich) |
+| `install.sh --restore PLIK` | przywraca kopię (także na nowym serwerze z zainstalowanym ZdrowieInfo; najpierw kopia bieżącego stanu) |
+| `install.sh --set-password [LOGIN]` | nowe hasło konta, odblokowanie |
+| `install.sh --reset-mfa LOGIN` | usuwa aplikację uwierzytelniającą i passkey konta (konfiguracja od nowa przy logowaniu) |
+| `install.sh --uninstall [--keep-data]` | usuwa wszystko, także bazę (proponuje kopię, pyta o potwierdzenie); `--keep-data` – tylko program |
 
 | Ścieżka na serwerze | |
 | --- | --- |
-| `/opt/zdrowieinfo` | aplikacja (tylko do odczytu dla usługi) |
-| `/etc/zdrowieinfo/zdrowieinfo.env` | konfiguracja i hasło bazy (root, 600) |
-| `/var/lib/zdrowieinfo/keys` | klucze Data Protection — bez nich restart wylogowuje, a zaszyfrowane ustawienia (klucz Claude API, VAPID) są nie do odczytania |
-| `/var/lib/zdrowieinfo/backups` | codzienne kopie bazy i kluczy (14 ostatnich) |
+| `/opt/zdrowieinfo/releases/<wersja>/` | program (root, tylko do odczytu dla usługi); `current` – dowiązanie do działającej wersji |
+| `/opt/zdrowieinfo/config/zdrowieinfo.env` | konfiguracja: adres, port, baza, repozytorium wydań (root, 600; czyta systemd) |
+| `/opt/zdrowieinfo/config/update.env` | ustawienia bazy dla `update.sh` i `backup.sh` (root, 600) |
+| `/opt/zdrowieinfo/data/` | dane usługi: klucze Data Protection (bez nich zaszyfrowany klucz Claude API i VAPID są nie do odczytania), raporty PDF, pobrane aktualizacje |
+| `/opt/zdrowieinfo/backups/` | kopie z `backup.sh`, w `pre-update/` zrzuty sprzed aktualizacji (tylko root) |
+| `/opt/zdrowieinfo/bin/` | `update.sh`, `backup.sh` (root) |
+
+Log: `journalctl -u zdrowieinfo -f`; aktualizacje: `journalctl -u zdrowieinfo-update`.
+
+### Wydania (publikowanie)
+
+Jedna wersja dla całości: `<Version>` w `Directory.Build.props` i `AppVersion.Current` (test sprawdza zgodność).
+
+1. Podnieś obie, zatwierdź i wypchnij na GitHub.
+2. **Actions → release → Run workflow** (opcjonalnie wydanie próbne albo szkic).
+3. Workflow sprawdza, że tagu `v<wersja>` jeszcze nie ma, uruchamia **build** (testy, skrypty, paczki x64 i arm64), liczy `SHA256SUMS.txt` i tworzy tag oraz wydanie z plikami.
+
+Repozytorium wydań: [BarPos/ZdrowieInfo](https://github.com/BarPos/ZdrowieInfo) – workflow wpisuje do `install.sh` repozytorium, w którym działa. Lokalnie: `build/build-server.sh [--arch x64|arm64] [--repository właściciel/nazwa]` → `artifacts/` (domyślnie BarPos/ZdrowieInfo; `--repository ""` – paczki bez GitHuba, np. do testów w kontenerze). Pobieranie `install.sh` bez logowania i sprawdzanie aktualizacji bez tokenu wymagają publicznego repozytorium (prywatne: `ZdrowieInfo__Updates__GitHubToken` w `zdrowieinfo.env`).
+
+Testy skryptów: `deploy/linux/update.sh --self-test`, `deploy/linux/tests/update-functions-test.sh`, a całość w kontenerze Ubuntu (paczki z `--repository ""`): `deploy/linux/tests/container-smoke.sh KATALOG_PACZEK KATALOG_NOWSZEJ_WERSJI` oraz współdzielony PostgreSQL: `deploy/linux/tests/container-sharedpg-smoke.sh KATALOG_PACZEK`.
 
 ## Polecenia serwera
 
-Uruchamiane z katalogu aplikacji, jako użytkownik usługi i z jej konfiguracją, np.:
+Program serwera ma też polecenia (jako użytkownik usługi, z jej konfiguracją – najprościej przez funkcję z `update.sh`):
 
 ```bash
-cd /opt/zdrowieinfo && sudo -u zdrowieinfo env $(sudo grep -v '^#' /etc/zdrowieinfo/zdrowieinfo.env | xargs) ./ZdrowieInfo.Server --reset-mfa admin
+sudo bash -c 'source /opt/zdrowieinfo/bin/update.sh && zi_run_as_service_user /opt/zdrowieinfo/current --check-sources'
 ```
 
 | Polecenie | |

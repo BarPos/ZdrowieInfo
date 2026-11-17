@@ -1,7 +1,9 @@
+# Codzienna kopia zapasowa ZdrowieInfo (baza, konfiguracja, klucze, dane, program); zostaje 14 ostatnich.
 [Unit]
-Description=Kopia zapasowa ZdrowieInfo (baza + klucze)
+Description=Kopia zapasowa ZdrowieInfo
 After=postgresql.service
 
 [Service]
 Type=oneshot
-ExecStart=/usr/local/sbin/zdrowieinfo-backup
+User=root
+ExecStart=/opt/zdrowieinfo/bin/backup.sh create --keep 14

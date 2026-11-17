@@ -328,3 +328,5 @@ Etapy 5, 6 i 7 są od siebie niezależne — kolejność można zmienić według
 ## Po etapach 1–7 (17.11.2026)
 
 Role administrator/użytkownik, zarządzanie użytkownikami (z usunięciem 2FA), raporty wstecz i okresowe z pobieraniem brakujących wpisów, usuwanie raportów, publiczny link do PDF (bez pobierania .tex), stronicowanie, wszystkie źródła codziennie — [docs/decyzje.md](docs/decyzje.md), D25–D31.
+
+Instalacja, aktualizacje i wydania jak w DomainNotice: `install.sh` (menu konserwacji), `update.sh` z kopią bazy i wycofaniem, Panel → Aktualizacje, workflow `build` i `release` na GitHubie — [docs/decyzje.md](docs/decyzje.md), D32.

@@ -30,7 +30,7 @@ public class RolesTests(PostgresFixture postgres)
 
         foreach (var url in new[] { "/", "/szukaj?q=pui", "/raporty/2026-11-18", "/Account/Manage", "/Account/Manage/Notifications", "/Account/Manage/ChangePassword" })
             Assert.Equal(HttpStatusCode.OK, await StatusAsync(user, url));
-        foreach (var url in new[] { "/incydenty", "/panel", "/panel/zrodla", "/panel/raporty", "/panel/uzytkownicy", "/panel/klucze", "/eksport/raport-2026-11-18.pdf" })
+        foreach (var url in new[] { "/incydenty", "/panel", "/panel/zrodla", "/panel/raporty", "/panel/uzytkownicy", "/panel/klucze", "/panel/aktualizacje", "/eksport/raport-2026-11-18.pdf" })
             await AssertDeniedAsync(user, url);
 
         var report = await (await user.GetAsync("/raporty/2026-11-18")).Content.ReadAsStringAsync();

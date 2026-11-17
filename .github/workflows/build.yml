@@ -1,0 +1,92 @@
+# Budowanie i testy. Uruchamiany ręcznie (Actions → build → Run workflow) i jako część release.yml.
+# Wynik (artefakty do pobrania, bez wydania):
+#   ZdrowieInfo.Server-<wersja>-linux-x64.tar.gz, ZdrowieInfo.Server-<wersja>-linux-arm64.tar.gz, install.sh
+# Repozytorium wydań wpisane w install.sh to to repozytorium (zmienna GITHUB_REPOSITORY ustawiana przez Actions).
+name: build
+
+on:
+  workflow_dispatch:
+  workflow_call:
+    outputs:
+      version:
+        description: "Wersja z Directory.Build.props"
+        value: ${{ jobs.version.outputs.version }}
+
+permissions:
+  contents: read
+
+jobs:
+  version:
+    name: Wersja
+    runs-on: ubuntu-24.04
+    outputs:
+      version: ${{ steps.v.outputs.version }}
+    steps:
+      - uses: actions/checkout@v7
+      - id: v
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="$(sed -n 's:.*<Version>\([^<]*\)</Version>.*:\1:p' Directory.Build.props | head -n1)"
+          app="$(sed -n 's:.*const string Current = "\([^"]*\)".*:\1:p' src/ZdrowieInfo.Server.Core/Common/AppVersion.cs | head -n1)"
+          [[ "$version" =~ ^[0-9]{1,5}\.[0-9]{1,5}\.[0-9]{1,5}$ ]] || { echo "::error::wersja '$version' w Directory.Build.props nie ma postaci x.y.z"; exit 1; }
+          [[ "$app" == "$version" ]] || { echo "::error::AppVersion.Current ($app) różni się od Directory.Build.props ($version)"; exit 1; }
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+  test:
+    name: Testy
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-dotnet@v6
+        with:
+          global-json-file: global.json
+      - name: Skrypty powłoki
+        shell: bash
+        run: |
+          set -euo pipefail
+          for f in build/build-server.sh deploy/linux/*.sh deploy/linux/tests/*.sh; do bash -n "$f"; done
+          # Uwagi shellcheck są raportowane, ale nie przerywają budowania.
+          if command -v shellcheck >/dev/null; then
+            shellcheck -x -S warning build/build-server.sh deploy/linux/*.sh deploy/linux/tests/*.sh ||
+              echo "::warning::shellcheck zgłosił uwagi (nie blokują)"
+          fi
+          deploy/linux/update.sh --self-test
+          deploy/linux/tests/update-functions-test.sh
+      - name: Budowanie
+        run: dotnet build ZdrowieInfo.sln -c Release
+      - name: Testy serwera (PostgreSQL 16 w Testcontainers)
+        run: dotnet test --project tests/ZdrowieInfo.Server.Tests -c Release
+
+  server:
+    name: Paczki serwera
+    needs: version
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-dotnet@v6
+        with:
+          global-json-file: global.json
+      - name: build-server.sh
+        run: build/build-server.sh --arch x64 --arch arm64
+      - name: Kontrola plików
+        shell: bash
+        run: |
+          set -euo pipefail
+          v='${{ needs.version.outputs.version }}'
+          test -f "artifacts/ZdrowieInfo.Server-$v-linux-x64.tar.gz"
+          test -f "artifacts/ZdrowieInfo.Server-$v-linux-arm64.tar.gz"
+          grep -qx "GITHUB_REPOSITORY=\"$GITHUB_REPOSITORY\"" artifacts/install.sh
+          # Lista do pliku: "tar | grep -q" przy pipefail kończy tar błędem zapisu.
+          tar -tzf "artifacts/ZdrowieInfo.Server-$v-linux-x64.tar.gz" > "$RUNNER_TEMP/server-files.txt"
+          grep -qE '^\./wwwroot/_framework/blazor\.web.*\.js$' "$RUNNER_TEMP/server-files.txt"
+          grep -qx './deploy/linux/update.sh' "$RUNNER_TEMP/server-files.txt"
+          # install.sh w paczce i obok niej – te same bajty.
+          tar -xzf "artifacts/ZdrowieInfo.Server-$v-linux-x64.tar.gz" -O ./deploy/linux/install.sh | cmp - artifacts/install.sh
+      - uses: actions/upload-artifact@v7
+        with:
+          name: server
+          if-no-files-found: error
+          path: |
+            artifacts/ZdrowieInfo.Server-*.tar.gz
+            artifacts/install.sh

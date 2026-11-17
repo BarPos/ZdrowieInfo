@@ -1,33 +1,50 @@
+# Serwer ZdrowieInfo. Instaluje install.sh do /etc/systemd/system/.
 [Unit]
 Description=ZdrowieInfo – monitoring komunikatów NFZ, CeZ, MZ i CSIRT CeZ
 After=network-online.target postgresql.service
 Wants=network-online.target
 
 [Service]
+# Serwer używa UseSystemd() i sam zgłasza gotowość.
 Type=notify
 User=zdrowieinfo
 Group=zdrowieinfo
-WorkingDirectory=/opt/zdrowieinfo
-ExecStart=/opt/zdrowieinfo/ZdrowieInfo.Server
-EnvironmentFile=/etc/zdrowieinfo/zdrowieinfo.env
+WorkingDirectory=/opt/zdrowieinfo/current
+ExecStart=/opt/zdrowieinfo/current/ZdrowieInfo.Server
+# Konfiguracja (adres, baza, repozytorium wydań) – zapisuje install.sh; root:root 600, czyta ją systemd.
+EnvironmentFile=/opt/zdrowieinfo/config/zdrowieinfo.env
 Environment=ASPNETCORE_ENVIRONMENT=Production
 Environment=DOTNET_NOLOGO=1
+Environment=DOTNET_CLI_TELEMETRY_OPTOUT=1
+# Migracje przy starcie – trochę czasu.
+TimeoutStartSec=300
+TimeoutStopSec=30
 Restart=on-failure
 RestartSec=10
-TimeoutStartSec=120
 
-# Ograniczenia: usługa pisze tylko do katalogu danych.
+# Ograniczenia. Program (releases/, current) i config/ są dla usługi tylko do odczytu; pisze wyłącznie w data/
+# (klucze, raporty PDF, cache TeX-a, pobrane aktualizacje). backups/ jest tylko dla roota.
 NoNewPrivileges=true
 ProtectSystem=strict
+ReadWritePaths=/opt/zdrowieinfo/data
 ProtectHome=true
 PrivateTmp=true
 PrivateDevices=true
 ProtectKernelTunables=true
 ProtectKernelModules=true
+ProtectKernelLogs=true
 ProtectControlGroups=true
+ProtectClock=true
+ProtectHostname=true
 RestrictSUIDSGID=true
+RestrictRealtime=true
+RestrictNamespaces=true
 LockPersonality=true
-ReadWritePaths=/var/lib/zdrowieinfo
+RemoveIPC=true
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6 AF_NETLINK
+SystemCallArchitectures=native
+UMask=0077
+# Celowo bez MemoryDenyWriteExecute (psuje JIT .NET).
 
 [Install]
 WantedBy=multi-user.target

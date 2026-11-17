@@ -74,6 +74,9 @@ public sealed class DailyReportService(
 
     private readonly SemaphoreSlim _lock = new(1, 1);
 
+    /// <summary>Trwa przygotowywanie albo zapis raportu.</summary>
+    public bool IsBusy => _lock.CurrentCount == 0;
+
     /// <param name="replace">Zastępuje istniejący raport (wpisy z niego wracają do wejścia).</param>
     /// <param name="finalAttempt">Przy błędzie przejściowym nie czekać – od razu raport awaryjny.</param>
     public async Task<ReportRunResult> GenerateAsync(DateOnly date, bool replace = false, bool finalAttempt = true, CancellationToken ct = default)

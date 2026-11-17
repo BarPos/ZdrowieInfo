@@ -1,0 +1,12 @@
+# Uruchamia zdrowieinfo-update.service, gdy serwer zleci aktualizację (panel → Aktualizacje).
+# Serwer zapisuje request.conf atomowo (plik tymczasowy + zmiana nazwy). update.sh usuwa go przed czymkolwiek innym,
+# bo PathExists= reaguje, dopóki plik istnieje.
+[Unit]
+Description=Oczekiwanie na zlecenia aktualizacji ZdrowieInfo
+
+[Path]
+PathExists=/opt/zdrowieinfo/data/updates/request.conf
+Unit=zdrowieinfo-update.service
+
+[Install]
+WantedBy=multi-user.target

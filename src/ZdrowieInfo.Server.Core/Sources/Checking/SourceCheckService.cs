@@ -31,6 +31,9 @@ public sealed class SourceCheckService(
 {
     private readonly SemaphoreSlim _runLock = new(1, 1);
 
+    /// <summary>Trwa sprawdzanie źródeł albo pobieranie archiwum (aktualizacja serwera czeka).</summary>
+    public bool IsBusy => _runLock.CurrentCount == 0;
+
     private sealed record Outcome(bool Success, int NewItems = 0, CheckErrorType? Error = null, string? Message = null, int? ItemsFound = null,
         string? ContentHash = null, int Pages = 1, string? Warning = null)
     {

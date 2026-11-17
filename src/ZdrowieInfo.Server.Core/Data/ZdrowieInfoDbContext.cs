@@ -27,6 +27,7 @@ public sealed class ZdrowieInfoDbContext(DbContextOptions<ZdrowieInfoDbContext> 
     public DbSet<Report> Reports => Set<Report>();
     public DbSet<ReportFinding> ReportFindings => Set<ReportFinding>();
     public DbSet<FindingCitation> FindingCitations => Set<FindingCitation>();
+    public DbSet<Updates.ServerUpdateRun> UpdateRuns => Set<Updates.ServerUpdateRun>();
     public DbSet<ApiKey> ApiKeys => Set<ApiKey>();
     public DbSet<PushSubscriptionRecord> PushSubscriptions => Set<PushSubscriptionRecord>();
 
@@ -146,6 +147,17 @@ public sealed class ZdrowieInfoDbContext(DbContextOptions<ZdrowieInfoDbContext> 
             e.Property(x => x.SearchVector).HasColumnType("tsvector").HasComputedColumnSql(
                 $"setweight(to_tsvector('{SearchConfig}'::regconfig, coalesce(title, '')), 'A') || setweight(to_tsvector('{SearchConfig}'::regconfig, coalesce(summary, '')), 'B')", stored: true);
             e.HasIndex(x => x.SearchVector).HasMethod("GIN");
+        });
+
+        builder.Entity<Updates.ServerUpdateRun>(e =>
+        {
+            e.ToTable("update_runs");
+            e.HasIndex(x => x.RequestedAt);
+            e.Property(x => x.FromVersion).HasMaxLength(32);
+            e.Property(x => x.ToVersion).HasMaxLength(32);
+            e.Property(x => x.RequestedBy).HasMaxLength(256);
+            e.Property(x => x.State).HasConversion<string>().HasMaxLength(20);
+            e.Property(x => x.Message).HasMaxLength(2000);
         });
 
         builder.Entity<ReportFinding>(e =>

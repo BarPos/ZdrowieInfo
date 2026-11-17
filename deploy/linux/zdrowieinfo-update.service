@@ -1,0 +1,12 @@
+# Wykonuje zleconą aktualizację ZdrowieInfo. Jednorazowo, jako root, we własnej jednostce – działa dalej, gdy zatrzymuje
+# i uruchamia zdrowieinfo.service. Uruchamia kopię zainstalowaną przez install.sh, nigdy skrypt z instalowanej paczki.
+[Unit]
+Description=Aktualizacja ZdrowieInfo
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=root
+ExecStart=/opt/zdrowieinfo/bin/update.sh
+# Pobieranie jest już zrobione; to obejmuje rozpakowanie, pg_dump, migracje i 2-minutowe sprawdzanie /healthz.
+TimeoutStartSec=1h

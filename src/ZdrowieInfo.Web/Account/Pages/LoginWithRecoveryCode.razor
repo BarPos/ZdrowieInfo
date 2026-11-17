@@ -1,0 +1,74 @@
+@page "/Account/LoginWithRecoveryCode"
+@attribute [AllowAnonymous]
+
+@using System.ComponentModel.DataAnnotations
+@using Microsoft.AspNetCore.Identity
+@using ZdrowieInfo.Server.Data
+
+@inject SignInManager<AppUser> SignInManager
+@inject IdentityRedirectManager RedirectManager
+@inject ILogger<LoginWithRecoveryCode> Logger
+
+<PageTitle>Kod odzyskiwania – ZdrowieInfo</PageTitle>
+
+<section class="card narrow">
+    <h1>Kod odzyskiwania</h1>
+    <StatusMessage Message="@message" />
+    <p>Wpisz jeden z zapisanych kodów odzyskiwania. Każdy kod działa jeden raz. Po zalogowaniu skonfiguruj aplikację uwierzytelniającą ponownie.</p>
+    <EditForm Model="Input" FormName="login-with-recovery-code" OnValidSubmit="OnValidSubmitAsync" method="post">
+        <DataAnnotationsValidator />
+        <div class="field">
+            <label for="Input.RecoveryCode">Kod odzyskiwania</label>
+            <InputText @bind-Value="Input.RecoveryCode" id="Input.RecoveryCode" autocomplete="off" />
+            <ValidationMessage For="() => Input.RecoveryCode" class="error" />
+        </div>
+        <button type="submit" class="btn btn-primary wide">Zaloguj</button>
+    </EditForm>
+</section>
+
+@code {
+    private string? message;
+    private AppUser user = default!;
+
+    [SupplyParameterFromForm] private InputModel Input { get; set; } = default!;
+
+    [SupplyParameterFromQuery] private string? ReturnUrl { get; set; }
+
+    protected override async Task OnInitializedAsync()
+    {
+        Input ??= new();
+        var pending = await SignInManager.GetTwoFactorAuthenticationUserAsync();
+        if (pending is null)
+        {
+            RedirectManager.RedirectTo("Account/Login");
+            return;
+        }
+        user = pending;
+    }
+
+    private async Task OnValidSubmitAsync()
+    {
+        var result = await SignInManager.TwoFactorRecoveryCodeSignInAsync(Input.RecoveryCode.Replace(" ", string.Empty));
+
+        if (result.Succeeded)
+        {
+            Logger.LogWarning("Użytkownik {UserName} zalogowany kodem odzyskiwania.", user.UserName);
+            RedirectManager.RedirectTo(ReturnUrl);
+        }
+        else if (result.IsLockedOut)
+        {
+            RedirectManager.RedirectTo("Account/Lockout");
+        }
+        else
+        {
+            Logger.LogWarning("Nieprawidłowy kod odzyskiwania dla {UserName}.", user.UserName);
+            message = "Błąd: nieprawidłowy kod odzyskiwania.";
+        }
+    }
+
+    private sealed class InputModel
+    {
+        [Required(ErrorMessage = "Podaj kod odzyskiwania.")]
+        public string RecoveryCode { get; set; } = "";
+    }
+}

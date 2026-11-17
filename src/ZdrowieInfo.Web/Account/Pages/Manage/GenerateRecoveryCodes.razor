@@ -1,0 +1,50 @@
+@page "/Account/Manage/GenerateRecoveryCodes"
+
+@using Microsoft.AspNetCore.Identity
+@using ZdrowieInfo.Server.Data
+
+@inject UserManager<AppUser> UserManager
+@inject IdentityRedirectManager RedirectManager
+@inject ILogger<GenerateRecoveryCodes> Logger
+
+<PageTitle>Kody odzyskiwania – ZdrowieInfo</PageTitle>
+
+@if (recoveryCodes is not null)
+{
+    <ShowRecoveryCodes RecoveryCodes="recoveryCodes.ToArray()" StatusMessage="Wygenerowano nowe kody odzyskiwania." />
+}
+else
+{
+    <h2>Nowe kody odzyskiwania</h2>
+    <div class="alert alert-warn" role="alert">
+        <p>Dotychczasowe kody przestaną działać.</p>
+    </div>
+    <form @formname="generate-recovery-codes" @onsubmit="OnSubmitAsync" method="post">
+        <AntiforgeryToken />
+        <button class="btn btn-danger" type="submit">Wygeneruj nowe kody</button>
+    </form>
+}
+
+@code {
+    private AppUser? user;
+    private IEnumerable<string>? recoveryCodes;
+
+    [CascadingParameter] private HttpContext HttpContext { get; set; } = default!;
+
+    protected override async Task OnInitializedAsync()
+    {
+        user = await UserManager.GetUserAsync(HttpContext.User);
+        if (user is null) RedirectManager.RedirectToInvalidUser(UserManager, HttpContext);
+    }
+
+    private async Task OnSubmitAsync()
+    {
+        if (user is null)
+        {
+            RedirectManager.RedirectToInvalidUser(UserManager, HttpContext);
+            return;
+        }
+        recoveryCodes = await UserManager.GenerateNewTwoFactorRecoveryCodesAsync(user, 10);
+        Logger.LogInformation("Użytkownik {UserName} wygenerował nowe kody odzyskiwania.", user.UserName);
+    }
+}

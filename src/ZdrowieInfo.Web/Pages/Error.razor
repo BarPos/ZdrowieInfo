@@ -1,0 +1,20 @@
+@page "/Error"
+@attribute [AllowAnonymous]
+@using System.Diagnostics
+
+<PageTitle>Błąd – ZdrowieInfo</PageTitle>
+
+<h1>Wystąpił błąd</h1>
+<p>Spróbuj ponownie. Jeśli błąd się powtarza, sprawdź log usługi (<code>journalctl -u zdrowieinfo</code>).</p>
+@if (!string.IsNullOrEmpty(RequestId))
+{
+    <p class="muted">Identyfikator żądania: <code>@RequestId</code></p>
+}
+
+@code {
+    [CascadingParameter] private HttpContext? HttpContext { get; set; }
+
+    private string? RequestId { get; set; }
+
+    protected override void OnInitialized() => RequestId = Activity.Current?.Id ?? HttpContext?.TraceIdentifier;
+}

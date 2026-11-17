@@ -1,0 +1,18 @@
+<StatusMessage Message="@StatusMessage" />
+<h2>Kody odzyskiwania</h2>
+<div class="alert alert-warn" role="alert">
+    <p><strong>Zapisz te kody w bezpiecznym miejscu</strong> (np. w menedżerze haseł).</p>
+    <p>Jeśli stracisz telefon z aplikacją uwierzytelniającą i nie będziesz mieć kodów, stracisz dostęp do konta. Każdy kod działa jeden raz.</p>
+</div>
+<ul class="recovery-codes">
+    @foreach (var recoveryCode in RecoveryCodes)
+    {
+        <li><code>@recoveryCode</code></li>
+    }
+</ul>
+<p><a class="btn btn-primary" href="">Przejdź do aplikacji</a></p>
+
+@code {
+    [Parameter] public string[] RecoveryCodes { get; set; } = [];
+    [Parameter] public string? StatusMessage { get; set; }
+}

@@ -1,0 +1,33 @@
+[Unit]
+Description=ZdrowieInfo – monitoring komunikatów NFZ, CeZ, MZ i CSIRT CeZ
+After=network-online.target postgresql.service
+Wants=network-online.target
+
+[Service]
+Type=notify
+User=zdrowieinfo
+Group=zdrowieinfo
+WorkingDirectory=/opt/zdrowieinfo
+ExecStart=/opt/zdrowieinfo/ZdrowieInfo.Server
+EnvironmentFile=/etc/zdrowieinfo/zdrowieinfo.env
+Environment=ASPNETCORE_ENVIRONMENT=Production
+Environment=DOTNET_NOLOGO=1
+Restart=on-failure
+RestartSec=10
+TimeoutStartSec=120
+
+# Ograniczenia: usługa pisze tylko do katalogu danych.
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+LockPersonality=true
+ReadWritePaths=/var/lib/zdrowieinfo
+
+[Install]
+WantedBy=multi-user.target

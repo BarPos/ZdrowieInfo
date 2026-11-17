@@ -1,0 +1,43 @@
+@page "/Account/Manage/ResetAuthenticator"
+
+@using Microsoft.AspNetCore.Identity
+@using ZdrowieInfo.Server.Data
+
+@inject UserManager<AppUser> UserManager
+@inject SignInManager<AppUser> SignInManager
+@inject IdentityRedirectManager RedirectManager
+@inject ILogger<ResetAuthenticator> Logger
+
+<PageTitle>Nowy telefon – ZdrowieInfo</PageTitle>
+
+<h2>Przeniesienie na nowy telefon</h2>
+<div class="alert alert-warn" role="alert">
+    <p><strong>Obecny kod w aplikacji uwierzytelniającej przestanie działać.</strong></p>
+    <p>Od razu zobaczysz nowy kod QR do zeskanowania. Dopóki go nie potwierdzisz, aplikacja będzie dostępna tylko na stronie konfiguracji.</p>
+</div>
+<form @formname="reset-authenticator" @onsubmit="OnSubmitAsync" method="post">
+    <AntiforgeryToken />
+    <button class="btn btn-danger" type="submit">Wygeneruj nowy klucz</button>
+</form>
+
+@code {
+    [CascadingParameter] private HttpContext HttpContext { get; set; } = default!;
+
+    private async Task OnSubmitAsync()
+    {
+        var user = await UserManager.GetUserAsync(HttpContext.User);
+        if (user is null)
+        {
+            RedirectManager.RedirectToInvalidUser(UserManager, HttpContext);
+            return;
+        }
+
+        await UserManager.SetTwoFactorEnabledAsync(user, false);
+        await UserManager.ResetAuthenticatorKeyAsync(user);
+        await SignInManager.RefreshSignInAsync(user);
+        Logger.LogInformation("Użytkownik {UserName} zresetował klucz aplikacji uwierzytelniającej.", user.UserName);
+
+        RedirectManager.RedirectToWithStatus("Account/Manage/EnableAuthenticator",
+            "Klucz został zmieniony. Zeskanuj nowy kod QR.", HttpContext);
+    }
+}

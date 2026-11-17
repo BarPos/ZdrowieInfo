@@ -1,0 +1,82 @@
+@page "/Account/LoginWith2fa"
+@attribute [AllowAnonymous]
+
+@using System.ComponentModel.DataAnnotations
+@using Microsoft.AspNetCore.Identity
+@using ZdrowieInfo.Server.Data
+
+@inject SignInManager<AppUser> SignInManager
+@inject IdentityRedirectManager RedirectManager
+@inject ILogger<LoginWith2fa> Logger
+
+<PageTitle>Kod weryfikacyjny – ZdrowieInfo</PageTitle>
+
+<section class="card narrow">
+    <h1>Kod weryfikacyjny</h1>
+    <StatusMessage Message="@message" />
+    <p>Wpisz 6-cyfrowy kod z aplikacji uwierzytelniającej.</p>
+    <EditForm Model="Input" FormName="login-with-2fa" OnValidSubmit="OnValidSubmitAsync" method="post">
+        <input type="hidden" name="ReturnUrl" value="@ReturnUrl" />
+        <input type="hidden" name="RememberMe" value="@RememberMe" />
+        <DataAnnotationsValidator />
+        <div class="field">
+            <label for="Input.TwoFactorCode">Kod</label>
+            <InputText @bind-Value="Input.TwoFactorCode" id="Input.TwoFactorCode" autocomplete="one-time-code" inputmode="numeric" autofocus />
+            <ValidationMessage For="() => Input.TwoFactorCode" class="error" />
+        </div>
+        <button type="submit" class="btn btn-primary wide">Zaloguj</button>
+    </EditForm>
+    <p class="muted">Nie masz dostępu do aplikacji? <a href="Account/LoginWithRecoveryCode?ReturnUrl=@Uri.EscapeDataString(ReturnUrl ?? "")">Użyj kodu odzyskiwania</a>.</p>
+</section>
+
+@code {
+    private string? message;
+    private AppUser user = default!;
+
+    [SupplyParameterFromForm] private InputModel Input { get; set; } = default!;
+
+    [SupplyParameterFromQuery] private string? ReturnUrl { get; set; }
+
+    [SupplyParameterFromQuery] private bool RememberMe { get; set; }
+
+    protected override async Task OnInitializedAsync()
+    {
+        Input ??= new();
+        var pending = await SignInManager.GetTwoFactorAuthenticationUserAsync();
+        if (pending is null)
+        {
+            RedirectManager.RedirectTo("Account/Login");
+            return;
+        }
+        user = pending;
+    }
+
+    private async Task OnValidSubmitAsync()
+    {
+        var code = Input.TwoFactorCode!.Replace(" ", string.Empty).Replace("-", string.Empty);
+        var result = await SignInManager.TwoFactorAuthenticatorSignInAsync(code, RememberMe, rememberClient: false);
+
+        if (result.Succeeded)
+        {
+            Logger.LogInformation("Użytkownik {UserName} zalogowany z kodem TOTP.", user.UserName);
+            RedirectManager.RedirectTo(ReturnUrl);
+        }
+        else if (result.IsLockedOut)
+        {
+            Logger.LogWarning("Konto {UserName} zablokowane.", user.UserName);
+            RedirectManager.RedirectTo("Account/Lockout");
+        }
+        else
+        {
+            Logger.LogWarning("Nieprawidłowy kod TOTP dla {UserName}.", user.UserName);
+            message = "Błąd: nieprawidłowy kod.";
+        }
+    }
+
+    private sealed class InputModel
+    {
+        [Required(ErrorMessage = "Podaj kod.")]
+        [StringLength(7, MinimumLength = 6, ErrorMessage = "Kod ma 6 cyfr.")]
+        public string? TwoFactorCode { get; set; }
+    }
+}

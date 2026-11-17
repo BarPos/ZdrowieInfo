@@ -1,0 +1,17 @@
+bin/
+obj/
+TestResults/
+artifacts/
+*.user
+.vs/
+.idea/
+.DS_Store
+
+# Spike'i etapu 0: lokalna baza i testowe dane logowania
+spikes/**/app.db*
+spikes/**/spike-credentials.txt
+
+# Lokalne ustawienia Claude Code
+.claude/launch.json
+.claude/settings.local.json
+.dev-data/

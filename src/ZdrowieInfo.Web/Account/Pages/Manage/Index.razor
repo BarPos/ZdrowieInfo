@@ -1,0 +1,43 @@
+@page "/Account/Manage"
+
+@using Microsoft.AspNetCore.Identity
+@using ZdrowieInfo.Server.Data
+
+@inject UserManager<AppUser> UserManager
+@inject IdentityRedirectManager RedirectManager
+
+<PageTitle>Konto – ZdrowieInfo</PageTitle>
+
+<StatusMessage />
+<h2>Przegląd</h2>
+@if (user is not null)
+{
+    <dl class="facts">
+        <dt>Login</dt><dd>@user.UserName</dd>
+        <dt>Weryfikacja dwuetapowa</dt><dd>@(twoFactor ? "włączona" : "wyłączona")</dd>
+        <dt>Klucze dostępu (passkey)</dt><dd>@passkeys</dd>
+        <dt>Kody odzyskiwania</dt><dd>@recoveryCodes pozostało</dd>
+    </dl>
+}
+
+@code {
+    private AppUser? user;
+    private bool twoFactor;
+    private int passkeys;
+    private int recoveryCodes;
+
+    [CascadingParameter] private HttpContext HttpContext { get; set; } = default!;
+
+    protected override async Task OnInitializedAsync()
+    {
+        user = await UserManager.GetUserAsync(HttpContext.User);
+        if (user is null)
+        {
+            RedirectManager.RedirectToInvalidUser(UserManager, HttpContext);
+            return;
+        }
+        twoFactor = await UserManager.GetTwoFactorEnabledAsync(user);
+        passkeys = (await UserManager.GetPasskeysAsync(user)).Count;
+        recoveryCodes = await UserManager.CountRecoveryCodesAsync(user);
+    }
+}

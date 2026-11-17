@@ -1,0 +1,28 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <BlazorDisableThrowNavigationException>true</BlazorDisableThrowNavigationException>
+    <!-- Host nie ma plików .razor (są w ZdrowieInfo.Web), więc SDK samo nie dołączy _framework/blazor.web.js. -->
+    <RequiresAspNetWebAssets>true</RequiresAspNetWebAssets>
+    <UserSecretsId>zdrowieinfo-server</UserSecretsId>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+    <PackageReference Include="Microsoft.Extensions.Hosting.Systemd" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="../ZdrowieInfo.Server.Core/ZdrowieInfo.Server.Core.csproj" />
+    <ProjectReference Include="../ZdrowieInfo.Web/ZdrowieInfo.Web.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="Pwa/service-worker.js" LogicalName="ZdrowieInfo.Server.Pwa.service-worker.js" />
+    <Content Remove="Pwa/**" />
+    <None Remove="Pwa/**" />
+  </ItemGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="ZdrowieInfo.Server.Tests" />
+  </ItemGroup>
+</Project>

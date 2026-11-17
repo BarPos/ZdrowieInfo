@@ -1,0 +1,14 @@
+# PostgreSQL do pracy lokalnej: docker compose -f deploy/dev/docker-compose.yml up -d
+services:
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: zdrowieinfo
+      POSTGRES_USER: zdrowieinfo
+      POSTGRES_PASSWORD: zdrowieinfo-dev
+    ports:
+      - "127.0.0.1:5433:5432"
+    volumes:
+      - zdrowieinfo-pg:/var/lib/postgresql/data
+volumes:
+  zdrowieinfo-pg:

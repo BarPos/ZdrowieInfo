@@ -1,0 +1,44 @@
+@page "/Account/Manage/TwoFactorAuthentication"
+
+@using Microsoft.AspNetCore.Identity
+@using ZdrowieInfo.Server.Data
+
+@inject UserManager<AppUser> UserManager
+@inject IdentityRedirectManager RedirectManager
+
+<PageTitle>Weryfikacja dwuetapowa – ZdrowieInfo</PageTitle>
+
+<StatusMessage />
+<h2>Weryfikacja dwuetapowa</h2>
+<p>Weryfikacja dwuetapowa jest obowiązkowa: po haśle aplikacja prosi o kod z aplikacji uwierzytelniającej. Nie da się jej wyłączyć, można tylko przenieść na nowy telefon.</p>
+
+@if (recoveryCodesLeft == 0)
+{
+    <div class="alert alert-error"><strong>Nie masz już kodów odzyskiwania.</strong> <a href="Account/Manage/GenerateRecoveryCodes">Wygeneruj nowe</a>.</div>
+}
+else if (recoveryCodesLeft <= 3)
+{
+    <div class="alert alert-warn">Zostało @recoveryCodesLeft kodów odzyskiwania. <a href="Account/Manage/GenerateRecoveryCodes">Wygeneruj nowe</a>.</div>
+}
+
+<div class="actions">
+    <a href="Account/Manage/ResetAuthenticator" class="btn">Przenieś na nowy telefon</a>
+    <a href="Account/Manage/GenerateRecoveryCodes" class="btn">Nowe kody odzyskiwania</a>
+</div>
+
+@code {
+    private int recoveryCodesLeft;
+
+    [CascadingParameter] private HttpContext HttpContext { get; set; } = default!;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var user = await UserManager.GetUserAsync(HttpContext.User);
+        if (user is null)
+        {
+            RedirectManager.RedirectToInvalidUser(UserManager, HttpContext);
+            return;
+        }
+        recoveryCodesLeft = await UserManager.CountRecoveryCodesAsync(user);
+    }
+}

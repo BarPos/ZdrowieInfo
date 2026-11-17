@@ -1,0 +1,40 @@
+@* Zwykły komponent bez własnego @rendermode – umieszczany WEWNĄTRZ strony panelu z InteractiveServer.
+   Providery MudBlazor muszą być w interaktywnym drzewie, a ChildContent nie przechodzi przez granicę trybu
+   renderowania (docs/decyzje.md, D2). *@
+@inject ISnackbar Snackbar
+
+<MudThemeProvider @ref="themeProvider" Theme="Theme" @bind-IsDarkMode="isDarkMode" ObserveSystemDarkModeChange="true" />
+<MudPopoverProvider />
+<MudDialogProvider />
+<MudSnackbarProvider />
+
+<div class="admin-shell">
+    @ChildContent
+</div>
+
+@code {
+    [Parameter, EditorRequired] public RenderFragment ChildContent { get; set; } = default!;
+
+    private MudThemeProvider? themeProvider;
+    private bool isDarkMode;
+
+    private static readonly MudTheme Theme = new()
+    {
+        PaletteLight = new PaletteLight { Primary = "#0f5c4d", AppbarBackground = "#0f5c4d" },
+        PaletteDark = new PaletteDark { Primary = "#4fb8a3" },
+    };
+
+    // Ten sam obwód SignalR przeżywa przejście na stronę statyczną i z powrotem; bez tego
+    // stare komunikaty pokazują się ponownie.
+    protected override void OnInitialized() => Snackbar.Clear();
+
+    // Motyw jak w systemie – tak samo jak strony czytelnika (prefers-color-scheme).
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender && themeProvider is not null)
+        {
+            isDarkMode = await themeProvider.GetSystemDarkModeAsync();
+            StateHasChanged();
+        }
+    }
+}

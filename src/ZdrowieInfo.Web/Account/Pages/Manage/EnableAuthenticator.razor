@@ -1,0 +1,127 @@
+@page "/Account/Manage/EnableAuthenticator"
+
+@using System.ComponentModel.DataAnnotations
+@using System.Text
+@using Microsoft.AspNetCore.Identity
+@using ZdrowieInfo.Server.Accounts
+@using ZdrowieInfo.Server.Data
+
+@inject UserManager<AppUser> UserManager
+@inject SignInManager<AppUser> SignInManager
+@inject IdentityRedirectManager RedirectManager
+@inject ILogger<EnableAuthenticator> Logger
+
+<PageTitle>Aplikacja uwierzytelniająca – ZdrowieInfo</PageTitle>
+
+@if (recoveryCodes is not null)
+{
+    <ShowRecoveryCodes RecoveryCodes="recoveryCodes.ToArray()" StatusMessage="@message" />
+}
+else
+{
+    <StatusMessage Message="@message" />
+    <h2>Aplikacja uwierzytelniająca</h2>
+    @if (!alreadyEnabled)
+    {
+        <div class="alert alert-warn">Weryfikacja dwuetapowa jest wymagana. Dokończ konfigurację, żeby korzystać z aplikacji.</div>
+    }
+    <ol class="steps">
+        <li>Zainstaluj aplikację uwierzytelniającą (np. Microsoft Authenticator, Google Authenticator, 1Password, aplikacja Hasła w iOS).</li>
+        <li>
+            Zeskanuj kod QR albo wpisz klucz <kbd>@sharedKey</kbd> (spacje i wielkość liter nie mają znaczenia).
+            <div class="qr" role="img" aria-label="Kod QR dla aplikacji uwierzytelniającej">@((MarkupString)qrSvg)</div>
+        </li>
+        <li>
+            Wpisz 6-cyfrowy kod, który pokaże aplikacja.
+            <EditForm Model="Input" FormName="send-code" OnValidSubmit="OnValidSubmitAsync" method="post" class="narrow">
+                <DataAnnotationsValidator />
+                <div class="field">
+                    <label for="Input.Code">Kod weryfikacyjny</label>
+                    <InputText @bind-Value="Input.Code" id="Input.Code" autocomplete="one-time-code" inputmode="numeric" />
+                    <ValidationMessage For="() => Input.Code" class="error" />
+                </div>
+                <button type="submit" class="btn btn-primary">Potwierdź</button>
+            </EditForm>
+        </li>
+    </ol>
+}
+
+@code {
+    private string? message;
+    private AppUser? user;
+    private bool alreadyEnabled;
+    private string? sharedKey;
+    private string qrSvg = "";
+    private IEnumerable<string>? recoveryCodes;
+
+    [CascadingParameter] private HttpContext HttpContext { get; set; } = default!;
+
+    [SupplyParameterFromForm] private InputModel Input { get; set; } = default!;
+
+    protected override async Task OnInitializedAsync()
+    {
+        Input ??= new();
+        user = await UserManager.GetUserAsync(HttpContext.User);
+        if (user is null)
+        {
+            RedirectManager.RedirectToInvalidUser(UserManager, HttpContext);
+            return;
+        }
+        alreadyEnabled = await UserManager.GetTwoFactorEnabledAsync(user);
+
+        var key = await UserManager.GetAuthenticatorKeyAsync(user);
+        if (string.IsNullOrEmpty(key))
+        {
+            await UserManager.ResetAuthenticatorKeyAsync(user);
+            key = await UserManager.GetAuthenticatorKeyAsync(user);
+        }
+        sharedKey = FormatKey(key!);
+        qrSvg = TotpQrCode.ToSvg(TotpQrCode.BuildUri(user.UserName!, key!));
+    }
+
+    private async Task OnValidSubmitAsync()
+    {
+        if (user is null)
+        {
+            RedirectManager.RedirectToInvalidUser(UserManager, HttpContext);
+            return;
+        }
+
+        var code = Input.Code.Replace(" ", string.Empty).Replace("-", string.Empty);
+        var valid = await UserManager.VerifyTwoFactorTokenAsync(user, UserManager.Options.Tokens.AuthenticatorTokenProvider, code);
+        if (!valid)
+        {
+            message = "Błąd: nieprawidłowy kod. Sprawdź, czy czas w telefonie jest ustawiony automatycznie.";
+            return;
+        }
+
+        await UserManager.SetTwoFactorEnabledAsync(user, true);
+        // Odświeżenie ciasteczka dodaje claim MFA – bez tego aplikacja dalej kierowałaby tutaj.
+        await SignInManager.RefreshSignInAsync(user);
+        Logger.LogInformation("Użytkownik {UserName} skonfigurował aplikację uwierzytelniającą.", user.UserName);
+
+        message = "Aplikacja uwierzytelniająca została skonfigurowana.";
+        if (await UserManager.CountRecoveryCodesAsync(user) == 0)
+            recoveryCodes = await UserManager.GenerateNewTwoFactorRecoveryCodesAsync(user, 10);
+        else
+            RedirectManager.RedirectToWithStatus("Account/Manage/TwoFactorAuthentication", message, HttpContext);
+    }
+
+    private static string FormatKey(string key)
+    {
+        var sb = new StringBuilder();
+        for (var i = 0; i < key.Length; i += 4)
+        {
+            if (i > 0) sb.Append(' ');
+            sb.Append(key.AsSpan(i, Math.Min(4, key.Length - i)));
+        }
+        return sb.ToString().ToLowerInvariant();
+    }
+
+    private sealed class InputModel
+    {
+        [Required(ErrorMessage = "Podaj kod.")]
+        [StringLength(7, MinimumLength = 6, ErrorMessage = "Kod ma 6 cyfr.")]
+        public string Code { get; set; } = "";
+    }
+}

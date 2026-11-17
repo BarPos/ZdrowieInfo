@@ -1,0 +1,27 @@
+@inherits LayoutComponentBase
+
+<header class="topbar">
+    <a class="brand" href="">ZdrowieInfo</a>
+    <AuthorizeView>
+        <Authorized>
+            <nav class="mainnav" aria-label="Menu główne">
+                <NavLink href="" Match="NavLinkMatch.All">Raporty</NavLink>
+                <NavLink href="panel" data-enhance-nav="false">Panel</NavLink>
+                <NavLink href="Account/Manage">Konto</NavLink>
+                <form action="Account/Logout" method="post" class="inline">
+                    <AntiforgeryToken />
+                    <button type="submit" class="linklike">Wyloguj</button>
+                </form>
+            </nav>
+        </Authorized>
+    </AuthorizeView>
+</header>
+
+<main class="content">
+    @Body
+</main>
+
+<div id="blazor-error-ui" data-nosnippet>
+    Wystąpił nieoczekiwany błąd. <a href="." class="reload">Odśwież</a>
+    <span class="dismiss">✕</span>
+</div>

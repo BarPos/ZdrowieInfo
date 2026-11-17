@@ -1,0 +1,7 @@
+[Unit]
+Description=Kopia zapasowa ZdrowieInfo (baza + klucze)
+After=postgresql.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/zdrowieinfo-backup

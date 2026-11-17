@@ -1,0 +1,43 @@
+@using ZdrowieInfo.Server.Common
+
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <base href="/" />
+    <ResourcePreloader />
+    <meta name="theme-color" content="#0f5c4d" />
+    <meta name="application-name" content="ZdrowieInfo" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="ZdrowieInfo" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <link rel="manifest" href="manifest.webmanifest" />
+    <link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32.png" />
+    <link rel="apple-touch-icon" href="icons/apple-touch-icon.png" />
+    <link rel="stylesheet" href="@Assets["_content/ZdrowieInfo.Web/css/app.css"]" />
+    @if (IsPanel)
+    {
+        <link rel="stylesheet" href="@Assets["_content/MudBlazor/MudBlazor.min.css"]" />
+    }
+    <HeadOutlet />
+</head>
+<body>
+    <Routes />
+    <script src="@Assets["_framework/blazor.web.js"]"></script>
+    <script src="@Assets["_content/ZdrowieInfo.Web/js/pwa.js"]" data-version="@AppVersion.Current"></script>
+    @if (IsPanel)
+    {
+        <script src="@Assets["_content/MudBlazor/MudBlazor.min.js"]"></script>
+    }
+    <script src="@Assets["_content/ZdrowieInfo.Web/Account/Shared/PasskeySubmit.razor.js"]" type="module"></script>
+</body>
+</html>
+
+@code {
+    [CascadingParameter] private HttpContext HttpContext { get; set; } = default!;
+
+    // CSS i JS MudBlazor tylko na stronach panelu. Przejście czytelnik → panel wymusza pełne przeładowanie
+    // (data-enhance-nav="false" w menu), więc zasoby zawsze są na miejscu.
+    private bool IsPanel => HttpContext.Request.Path.StartsWithSegments("/panel");
+}

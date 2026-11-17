@@ -1,0 +1,94 @@
+﻿@page "/Account/Manage/RenamePasskey/{Id}"
+
+@using ZdrowieInfo.Server.Data
+@using System.ComponentModel.DataAnnotations
+@using Microsoft.AspNetCore.Identity
+@using System.Buffers.Text
+
+@inject UserManager<AppUser> UserManager
+@inject IdentityRedirectManager RedirectManager
+
+<PageTitle>Nazwa klucza – ZdrowieInfo</PageTitle>
+
+<EditForm Model="Input" OnValidSubmit="Rename" FormName="rename-passkey" method="post" class="narrow">
+    <DataAnnotationsValidator />
+    @if (passkey?.Name is { } name)
+    {
+        <h2>Nowa nazwa klucza „@name”</h2>
+    }
+    else
+    {
+        <h2>Nazwij klucz dostępu</h2>
+        <p class="muted">Np. „iPhone” albo „Laptop w pracy”.</p>
+    }
+        <div class="field">
+        <label for="Input.Name">Nazwa</label>
+        <InputText @bind-Value="Input.Name" id="Input.Name" aria-required="true" />
+        <ValidationMessage For="() => Input.Name" class="error" />
+    </div>
+    <button type="submit" class="btn btn-primary">Zapisz</button>
+</EditForm>
+
+@code {
+    private AppUser? user;
+    private UserPasskeyInfo? passkey;
+
+    [CascadingParameter]
+    private HttpContext HttpContext { get; set; } = default!;
+
+    [Parameter]
+    public string? Id { get; set; }
+
+    [SupplyParameterFromForm]
+    private InputModel Input { get; set; } = default!;
+
+    protected override async Task OnInitializedAsync()
+    {
+        Input ??= new();
+
+        user = (await UserManager.GetUserAsync(HttpContext.User))!;
+        if (user is null)
+        {
+            RedirectManager.RedirectToInvalidUser(UserManager, HttpContext);
+            return;
+        }
+
+        byte[] credentialId;
+        try
+        {
+            credentialId = Base64Url.DecodeFromChars(Id);
+        }
+        catch (FormatException)
+        {
+            RedirectManager.RedirectToWithStatus("Account/Manage/Passkeys", "Błąd: nieprawidłowy identyfikator klucza.", HttpContext);
+            return;
+        }
+
+        passkey = await UserManager.GetPasskeyAsync(user, credentialId);
+        if (passkey is null)
+        {
+            RedirectManager.RedirectToWithStatus("Account/Manage/Passkeys", "Błąd: nie znaleziono klucza.", HttpContext);
+            return;
+        }
+    }
+
+    private async Task Rename()
+    {
+        passkey!.Name = Input.Name;
+        var result = await UserManager.AddOrUpdatePasskeyAsync(user!, passkey);
+        if (!result.Succeeded)
+        {
+            RedirectManager.RedirectToWithStatus("Account/Manage/Passkeys", "Błąd: nie udało się zapisać nazwy.", HttpContext);
+            return;
+        }
+
+        RedirectManager.RedirectToWithStatus("Account/Manage/Passkeys", "Zapisano nazwę klucza.", HttpContext);
+    }
+
+    private sealed class InputModel
+    {
+        [Required(ErrorMessage = "Podaj nazwę.")]
+        [StringLength(200, ErrorMessage = "Nazwa może mieć najwyżej {1} znaków.")]
+        public string Name { get; set; } = "";
+    }
+}

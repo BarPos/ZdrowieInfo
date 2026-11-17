@@ -323,6 +323,430 @@ namespace ZdrowieInfo.Server.Data.Migrations
                     b.ToTable("AspNetUsers", (string)null);
                 });
 
+            modelBuilder.Entity("ZdrowieInfo.Server.Sources.CheckRun", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<DateOnly>("Date")
+                        .HasColumnType("date")
+                        .HasColumnName("date");
+
+                    b.Property<string>("Error")
+                        .HasColumnType("text")
+                        .HasColumnName("error");
+
+                    b.Property<DateTimeOffset?>("FinishedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("finished_at");
+
+                    b.PrimitiveCollection<string[]>("Groups")
+                        .IsRequired()
+                        .HasColumnType("text[]")
+                        .HasColumnName("groups");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("kind");
+
+                    b.Property<int>("NewItems")
+                        .HasColumnType("integer")
+                        .HasColumnName("new_items");
+
+                    b.Property<int>("SourcesChecked")
+                        .HasColumnType("integer")
+                        .HasColumnName("sources_checked");
+
+                    b.Property<int>("SourcesFailed")
+                        .HasColumnType("integer")
+                        .HasColumnName("sources_failed");
+
+                    b.Property<DateTimeOffset>("StartedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("started_at");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("status");
+
+                    b.HasKey("Id")
+                        .HasName("pk_check_runs");
+
+                    b.HasIndex("StartedAt")
+                        .HasDatabaseName("ix_check_runs_started_at");
+
+                    b.ToTable("check_runs", (string)null);
+                });
+
+            modelBuilder.Entity("ZdrowieInfo.Server.Sources.Source", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTimeOffset?>("BaselineAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("baseline_at");
+
+                    b.Property<int>("ConsecutiveFailures")
+                        .HasColumnType("integer")
+                        .HasColumnName("consecutive_failures");
+
+                    b.Property<string>("ContentHash")
+                        .HasColumnType("text")
+                        .HasColumnName("content_hash");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("ETag")
+                        .HasColumnType("text")
+                        .HasColumnName("e_tag");
+
+                    b.Property<DateTimeOffset?>("FailingSince")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("failing_since");
+
+                    b.Property<string>("FetchMode")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("fetch_mode");
+
+                    b.Property<string>("Group")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("group");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_active");
+
+                    b.Property<DateTimeOffset?>("LastCheckedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("last_checked_at");
+
+                    b.Property<string>("LastModified")
+                        .HasColumnType("text")
+                        .HasColumnName("last_modified");
+
+                    b.Property<DateTimeOffset?>("LastSuccessAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("last_success_at");
+
+                    b.Property<string>("Method")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("method");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("name");
+
+                    b.Property<DateTimeOffset?>("NextRetryAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("next_retry_at");
+
+                    b.Property<string>("Notes")
+                        .HasColumnType("text")
+                        .HasColumnName("notes");
+
+                    b.Property<string>("PageText")
+                        .HasColumnType("text")
+                        .HasColumnName("page_text");
+
+                    b.Property<string>("Selectors")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("selectors");
+
+                    b.Property<string>("Slug")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("slug");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("status");
+
+                    b.Property<string>("StatusMessage")
+                        .HasColumnType("text")
+                        .HasColumnName("status_message");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<string>("Url")
+                        .IsRequired()
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)")
+                        .HasColumnName("url");
+
+                    b.HasKey("Id")
+                        .HasName("pk_sources");
+
+                    b.HasIndex("Slug")
+                        .IsUnique()
+                        .HasDatabaseName("ix_sources_slug");
+
+                    b.ToTable("sources", (string)null);
+                });
+
+            modelBuilder.Entity("ZdrowieInfo.Server.Sources.SourceIncident", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<int>("Attempts")
+                        .HasColumnType("integer")
+                        .HasColumnName("attempts");
+
+                    b.Property<string>("Details")
+                        .HasColumnType("text")
+                        .HasColumnName("details");
+
+                    b.Property<DateTimeOffset?>("EndedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("ended_at");
+
+                    b.Property<string>("ErrorType")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)")
+                        .HasColumnName("error_type");
+
+                    b.Property<bool>("FailurePushSent")
+                        .HasColumnType("boolean")
+                        .HasColumnName("failure_push_sent");
+
+                    b.Property<DateTimeOffset>("LastAttemptAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("last_attempt_at");
+
+                    b.Property<bool>("RecoveryPushSent")
+                        .HasColumnType("boolean")
+                        .HasColumnName("recovery_push_sent");
+
+                    b.Property<int>("SourceId")
+                        .HasColumnType("integer")
+                        .HasColumnName("source_id");
+
+                    b.Property<DateTimeOffset>("StartedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("started_at");
+
+                    b.HasKey("Id")
+                        .HasName("pk_source_incidents");
+
+                    b.HasIndex("SourceId", "StartedAt")
+                        .HasDatabaseName("ix_source_incidents_source_id_started_at");
+
+                    b.ToTable("source_incidents", (string)null);
+                });
+
+            modelBuilder.Entity("ZdrowieInfo.Server.Sources.SourceItem", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<string>("Content")
+                        .HasColumnType("text")
+                        .HasColumnName("content");
+
+                    b.Property<string>("ContentHash")
+                        .HasColumnType("text")
+                        .HasColumnName("content_hash");
+
+                    b.Property<int>("DetailAttempts")
+                        .HasColumnType("integer")
+                        .HasColumnName("detail_attempts");
+
+                    b.Property<string>("DetailError")
+                        .HasColumnType("text")
+                        .HasColumnName("detail_error");
+
+                    b.Property<DateTimeOffset?>("DetailFetchedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("detail_fetched_at");
+
+                    b.Property<DateTimeOffset>("FirstSeenAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("first_seen_at");
+
+                    b.Property<bool>("IsBaseline")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_baseline");
+
+                    b.Property<string>("Key")
+                        .IsRequired()
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)")
+                        .HasColumnName("key");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("kind");
+
+                    b.Property<DateTimeOffset>("LastChangedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("last_changed_at");
+
+                    b.Property<string>("PreviousTitle")
+                        .HasColumnType("text")
+                        .HasColumnName("previous_title");
+
+                    b.Property<DateOnly?>("PublishedOn")
+                        .HasColumnType("date")
+                        .HasColumnName("published_on");
+
+                    b.Property<int>("SourceId")
+                        .HasColumnType("integer")
+                        .HasColumnName("source_id");
+
+                    b.Property<string>("Summary")
+                        .HasColumnType("text")
+                        .HasColumnName("summary");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)")
+                        .HasColumnName("title");
+
+                    b.Property<int>("UpdateCount")
+                        .HasColumnType("integer")
+                        .HasColumnName("update_count");
+
+                    b.Property<string>("Url")
+                        .IsRequired()
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)")
+                        .HasColumnName("url");
+
+                    b.HasKey("Id")
+                        .HasName("pk_source_items");
+
+                    b.HasIndex("LastChangedAt")
+                        .HasDatabaseName("ix_source_items_last_changed_at");
+
+                    b.HasIndex("Url")
+                        .HasDatabaseName("ix_source_items_url");
+
+                    b.HasIndex("SourceId", "Key")
+                        .IsUnique()
+                        .HasDatabaseName("ix_source_items_source_id_key");
+
+                    b.ToTable("source_items", (string)null);
+                });
+
+            modelBuilder.Entity("ZdrowieInfo.Server.Sources.SourceSnapshot", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<long?>("CheckRunId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("check_run_id");
+
+                    b.Property<string>("ContentHash")
+                        .HasColumnType("text")
+                        .HasColumnName("content_hash");
+
+                    b.Property<int>("DurationMs")
+                        .HasColumnType("integer")
+                        .HasColumnName("duration_ms");
+
+                    b.Property<string>("ErrorMessage")
+                        .HasColumnType("text")
+                        .HasColumnName("error_message");
+
+                    b.Property<string>("ErrorType")
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)")
+                        .HasColumnName("error_type");
+
+                    b.Property<DateTimeOffset>("FetchedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("fetched_at");
+
+                    b.Property<int?>("HttpStatus")
+                        .HasColumnType("integer")
+                        .HasColumnName("http_status");
+
+                    b.Property<int?>("ItemsFound")
+                        .HasColumnType("integer")
+                        .HasColumnName("items_found");
+
+                    b.Property<int>("NewItems")
+                        .HasColumnType("integer")
+                        .HasColumnName("new_items");
+
+                    b.Property<bool>("NotModified")
+                        .HasColumnType("boolean")
+                        .HasColumnName("not_modified");
+
+                    b.Property<int>("PagesFetched")
+                        .HasColumnType("integer")
+                        .HasColumnName("pages_fetched");
+
+                    b.Property<int>("SourceId")
+                        .HasColumnType("integer")
+                        .HasColumnName("source_id");
+
+                    b.Property<bool>("Succeeded")
+                        .HasColumnType("boolean")
+                        .HasColumnName("succeeded");
+
+                    b.Property<string>("Warning")
+                        .HasColumnType("text")
+                        .HasColumnName("warning");
+
+                    b.HasKey("Id")
+                        .HasName("pk_source_snapshots");
+
+                    b.HasIndex("CheckRunId")
+                        .HasDatabaseName("ix_source_snapshots_check_run_id");
+
+                    b.HasIndex("SourceId", "FetchedAt")
+                        .HasDatabaseName("ix_source_snapshots_source_id_fetched_at");
+
+                    b.ToTable("source_snapshots", (string)null);
+                });
+
             modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityRoleClaim<string>", b =>
                 {
                     b.HasOne("Microsoft.AspNetCore.Identity.IdentityRole", null)
@@ -431,6 +855,42 @@ namespace ZdrowieInfo.Server.Data.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired()
                         .HasConstraintName("fk_asp_net_user_tokens_asp_net_users_user_id");
+                });
+
+            modelBuilder.Entity("ZdrowieInfo.Server.Sources.SourceIncident", b =>
+                {
+                    b.HasOne("ZdrowieInfo.Server.Sources.Source", null)
+                        .WithMany()
+                        .HasForeignKey("SourceId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_source_incidents_sources_source_id");
+                });
+
+            modelBuilder.Entity("ZdrowieInfo.Server.Sources.SourceItem", b =>
+                {
+                    b.HasOne("ZdrowieInfo.Server.Sources.Source", null)
+                        .WithMany()
+                        .HasForeignKey("SourceId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_source_items_sources_source_id");
+                });
+
+            modelBuilder.Entity("ZdrowieInfo.Server.Sources.SourceSnapshot", b =>
+                {
+                    b.HasOne("ZdrowieInfo.Server.Sources.CheckRun", null)
+                        .WithMany()
+                        .HasForeignKey("CheckRunId")
+                        .OnDelete(DeleteBehavior.SetNull)
+                        .HasConstraintName("fk_source_snapshots_check_runs_check_run_id");
+
+                    b.HasOne("ZdrowieInfo.Server.Sources.Source", null)
+                        .WithMany()
+                        .HasForeignKey("SourceId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_source_snapshots_sources_source_id");
                 });
 #pragma warning restore 612, 618
         }

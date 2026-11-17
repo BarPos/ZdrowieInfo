@@ -7,6 +7,7 @@ using ZdrowieInfo.Server.Common;
 using ZdrowieInfo.Server.Data;
 using ZdrowieInfo.Server.Hosting;
 using ZdrowieInfo.Server.Pwa;
+using ZdrowieInfo.Server.Sources;
 using ZdrowieInfo.Web;
 
 var culture = CultureInfo.GetCultureInfo("pl-PL");
@@ -37,6 +38,7 @@ builder.Services.AddZdrowieInfoCommon(appOptions);
 builder.Services.AddZdrowieInfoData(builder.Configuration);
 builder.Services.AddAccounts(appOptions, secureCookies: !builder.Environment.IsDevelopment());
 builder.Services.AddAuthorization();
+builder.Services.AddSources(builder.Configuration);
 builder.Services.AddZdrowieInfoWeb();
 builder.Services.AddHealthChecks();
 
@@ -59,6 +61,7 @@ if (command.Kind != CliCommandKind.Run)
     return await CliRunner.RunAsync(command, app.Services);
 
 await DatabaseMigrator.MigrateAsync(app.Services);
+await app.Services.GetRequiredService<SourceSeeder>().SeedAsync();
 
 app.UseForwardedHeaders();
 app.UseSecurityHeaders();

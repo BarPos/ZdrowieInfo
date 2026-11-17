@@ -1,0 +1,24 @@
+<MudStack Row="true" Wrap="Wrap.Wrap" Spacing="1" Class="mb-4">
+    @foreach (var (href, label) in Links)
+    {
+        <MudButton Href="@href" Variant="@(IsActive(href) ? Variant.Filled : Variant.Text)" Color="Color.Primary" Size="Size.Small">@label</MudButton>
+    }
+</MudStack>
+
+@code {
+    [Inject] private NavigationManager Nav { get; set; } = default!;
+
+    private static readonly (string Href, string Label)[] Links =
+    [
+        ("panel", "Przegląd"),
+        ("panel/zrodla", "Źródła"),
+        ("panel/uruchomienia", "Uruchomienia"),
+        ("panel/wpisy", "Wpisy"),
+    ];
+
+    private bool IsActive(string href)
+    {
+        var path = Nav.ToBaseRelativePath(Nav.Uri).Split('?')[0].TrimEnd('/');
+        return href == "panel" ? path == "panel" : path.StartsWith(href, StringComparison.Ordinal);
+    }
+}

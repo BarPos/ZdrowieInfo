@@ -1,0 +1,30 @@
+@using ZdrowieInfo.Server.Sources
+
+<MudDialog>
+    <DialogContent>
+        <MudText Typo="Typo.body2" Class="mb-2">
+            <MudLink Href="@Item.Url" Target="_blank">@Item.Url</MudLink><br />
+            Data publikacji: @Labels.Date(Item.PublishedOn) · wykryto: @Labels.Time(Item.FirstSeenAt)
+            @if (Item.UpdateCount > 0)
+            {
+                <span> · zaktualizowano: @Labels.Time(Item.LastChangedAt) (poprzedni tytuł: „@Item.PreviousTitle”)</span>
+            }
+        </MudText>
+        @if (Item.DetailError is not null)
+        {
+            <MudAlert Severity="Severity.Warning" Dense="true" Class="mb-2">Treść wpisu: @Item.DetailError</MudAlert>
+        }
+        @if (Item.Summary is not null)
+        {
+            <MudText Typo="Typo.subtitle2">Opis na liście</MudText>
+            <MudText Class="mb-3">@Item.Summary</MudText>
+        }
+        <MudText Typo="Typo.subtitle2">@(Item.Kind == SourceItemKind.PageChange ? "Zmienione fragmenty" : "Treść")</MudText>
+        <pre class="preview-text">@(Item.Content ?? (Item.IsBaseline ? "Stan bazowy – treść nie jest pobierana." : "Treść jeszcze nie pobrana."))</pre>
+    </DialogContent>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance Dialog { get; set; } = default!;
+    [Parameter] public SourceItem Item { get; set; } = default!;
+}

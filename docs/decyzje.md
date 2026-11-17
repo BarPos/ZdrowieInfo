@@ -131,3 +131,63 @@ Komponenty są w `ZdrowieInfo.Web`, więc SDK samo nie dołącza `_framework/bla
 - Paczka linux-x64 uruchomiona w kontenerze Ubuntu 24.04 (konfiguracja przez zmienne środowiskowe jak w `zdrowieinfo.env`): migracje, start, `/healthz`, strona logowania, `blazor.web.js`.
 
 **Nie sprawdzono:** `install.sh` i jednostki systemd na prawdziwym serwerze (tylko kontrola składni), dodania i logowania passkey (panel podglądu nie ma uwierzytelniacza — działa endpoint opcji WebAuthn), instalacji PWA na iPhonie przez HTTPS.
+
+# Decyzje — etap 2
+
+## D11. Selektory i fixture'y
+
+Selektory ustalone na prawdziwych stronach (17.11.2026), zapisanych w `tests/fixtures/sources/<slug>/`: `a.html` (lista lub strona), `b.html` (drugie pobranie stron „cała strona” — test stabilności), `detail.html` (strona pojedynczego wpisu, po jednej na portal). W CeR wycięte obrazki `data:` (4,6 MB → 120 KB). Lista źródeł z selektorami: `src/ZdrowieInfo.Server.Core/Sources/DefaultSources.json`, wgrywana przy starcie **tylko dla brakujących slugów** — edycje z panelu nie są nadpisywane.
+
+| Portal | Wpis | Tytuł / link | Data | Treść wpisu |
+| --- | --- | --- | --- | --- |
+| nfz.gov.pl, nfz-warszawa.pl | `.news-list .news` | `h3.title a` | `.date` | `.news-module` |
+| ezdrowie.gov.pl | `li.article-list-element` | `.articleListBigBoxTitle` / `a.showMoreText` | `.articleListBigBoxAddData` | `.articleMod` |
+| csirt.cez.gov.pl | `.teaser` (bez bloku „Polecane”) | `.views-field-field-title` / `.views-field-view-node a` | `time[datetime]` | `.field--name-field-lead, .field--name-field-content` |
+| cez.gov.pl | `.view-content .views-row` | `.views-field-title a` | `time[datetime]` | `.node__content` |
+| gov.pl (MZ) | `.art-prev li` | `.title a` | `.date` | `#main-content` |
+| NFZ „cała strona” | — | — | — | `.module-content .site-text` |
+| gov.pl CeR | — | — | — | `#main-content` bez `.event-date` |
+
+Na żywo (17.11.2026, z łącza domowego): wszystkie 23 źródła OK, pełne sprawdzenie ~42 s (19 źródeł na nfz.gov.pl × 2–3 s odstępu). Stan bazowy + drugie sprawdzenie: 0 fałszywych alarmów. ezdrowie.gov.pl pokazuje tylko 3 najnowsze wpisy — pełniejsza lista kategorii to `/portal/home/aktualnosci/?isExtend=true&categoryId=30` (adresu źródła nie zmieniałem; do decyzji).
+
+## D12. Wykrywanie zmian
+
+- **Klucz wpisu** = URL bez fragmentu, parametrów `utm_*` i bez `www.` (NFZ linkuje raz do `nfz.gov.pl`, raz do `www.nfz.gov.pl`).
+- **Aktualizacja wpisu**: ten sam klucz, ale inny tytuł lub data na liście (NFZ podbija stare wpisy „[AKTUALIZACJA…]”) → `UpdateCount++`, `PreviousTitle`, ponowne pobranie treści, wpis wraca do raportu.
+- **Cała strona**: tekst z blokami i **adresami linków** („Komunikat SWIAD (wersja 8.8.3) (https://…/plik.doc)”) — podmiana pliku pod tą samą nazwą też jest zmianą. Zmiana → wpis „Zmiana strony: …” z diffem (`+`/`-` z linią kontekstu). Test: tekst 14 stron identyczny między dwoma pobraniami.
+- **Stan bazowy** = pierwsza **udana** ekstrakcja (nie pierwsza próba). Zmiana adresu, metody albo selektorów w panelu → nowy stan bazowy i wyczyszczone walidatory HTTP.
+- **Walidatory** (`ETag`, `Last-Modified`) zapisywane tylko po udanej ekstrakcji, używane tylko po stanie bazowym; `304` = udane sprawdzenie bez zmian.
+- **Treść wpisów** pobierana po zapisaniu listy; wpis bez treści jest ponawiany przy kolejnych sprawdzeniach (do 3 prób, potem zostaje opis z listy). W jednym uruchomieniu każdy URL pobierany raz; treść z innego źródła o tym samym URL-u jest kopiowana (NFZ Aktualności i Komunikaty DI mają te same artykuły). **Do etapu 3:** raport musi łączyć wpisy o tym samym URL-u z różnych źródeł w jeden punkt.
+
+## D13. Pobieranie
+
+- User-Agent `ZdrowieInfo/<wersja>`; adres kontaktowy tylko z `ZdrowieInfo:Sources:ContactEmail` (domyślnie pusty).
+- Jedno żądanie naraz na domenę (bez `www.`), 2–3 s odstępu; domeny równolegle.
+- `robots.txt` raz na dobę na domenę, RFC 9309 (grupa `zdrowieinfo`, inaczej `*`; najdłuższa reguła wygrywa). Błąd pobrania `robots.txt` = brak ograniczeń, nie incydent. Test na prawdziwym `robots.txt` OW NFZ (grupa `Fasterfox` z `Disallow: /` nas nie dotyczy).
+- Ponowienia przy 5xx/timeoutach (Polly, 2 próby), limit 30 s na żądanie i 10 MB na odpowiedź, ciasteczka trzymane przez cały czas życia procesu (Imperva).
+- Blokada: HTTP 403/429 albo strona Incapsula zamiast treści.
+
+## D14. Incydenty i harmonogram
+
+- Błąd → ponowienie po 5 min, potem po kolejnych 5 (3 próby w ~10–15 min). Trzecia nieudana → incydent (początek = pierwsza nieudana próba), dalej próba co godzinę bez nowych incydentów. Pierwszy sukces zamyka incydent. Pojedynczy błąd naprawiony ponowieniem nie jest incydentem. Push o incydentach: etap 4 (pola w tabeli już są).
+- Harmonogram co minutę liczy z bazy, co jest należne: stan bazowy (nowe/edytowane źródła), planowe (ostatni udany sukces starszy niż ostatni termin grupy — R8), ponowienia. Restart i przerwa serwera niczego nie gubią. Jedno uruchomienie naraz (panel „Sprawdź teraz” czeka na harmonogram).
+- W `appsettings.Development.json` harmonogram wyłączony, żeby `dotnet run` nie odpytywało stron; lokalnie `--check-now`.
+- Porządki raz na dobę: treść wpisów starszych niż 12 miesięcy usuwana.
+
+## D15. Wiele stron listy – żeby nie pominąć wpisów
+
+Problem: sprawdzana była tylko pierwsza strona listy. Przy więcej niż jednej stronie nowych wpisów naraz (np. po przerwie serwera, po weekendzie dla źródeł tygodniowych, na ezdrowie już przy 4 nowych) część by przepadła.
+
+- **Reguła:** jeśli ostatni (najstarszy) wpis na stronie jest nowy, za nim mogą być kolejne nowe → pobierana jest następna strona (selektor `NextPage`), aż ostatni wpis strony będzie znany **albo** strona sięgnie wpisów starszych niż ostatnie udane sprawdzenie (minus dzień zapasu). Granica daty chroni przed zalaniem raportu, gdy strona usunie wpis lub zmieni adresy (wtedy na koniec 1. strony wsuwa się stary, nieznany wpis) — test `Removed_entry_does_not_flood_report_with_older_pages`. Stan bazowy bierze tylko pierwszą stronę. Wpisy wyróżnione u góry (bump, „hero”) nie przeszkadzają, bo liczy się ostatni wpis.
+- **Błąd kolejnej strony = nieudane sprawdzenie.** Nic nie jest zapisywane, ponowienie za 5 min przechodzi listę od początku. Zapis części wpisów zostawiłby trwałą lukę (następnym razem ostatni wpis 1. strony byłby już znany).
+- **Strony:** NFZ Walidacje `.pager li.active + li a`, OW NFZ `.pager span.active + a`, CSIRT i CeZ `.pager__item--next a`, MZ `a.pagination__arrow-right`. Testy na prawdziwych drugich stronach (`page2.html`). CSIRT pokazuje najnowszy artykuł na górze **każdej** strony — deduplikacja po kluczu.
+- **Archiwum NFZ** ma na 1. stronie karuzelę „Ważne!” (`.priority-slider`, bez dat) poza listą `.news` — selektor obejmuje oba bloki (inaczej ginęły 2 wpisy). Wpisy bez daty są w trybie archiwum zawsze brane.
+- **Bloki NFZ bez stronicowania** (Aktualności dla świadczeniodawców, Słowniki, Komunikaty DI — „10 najnowszych”): przy przepełnieniu lista zapasowa `OverflowUrl` = archiwum „Aktualności Centrali” ze stronicowaniem; brane są wpisy z datą ≥ (dzień ostatniego udanego sprawdzenia − 1 dzień), kolejne strony archiwum, dopóki sięgają tej daty. Archiwum ma wszystkie tematy (też dla pacjentów) — świadomie wolimy nadmiar (Claude oznaczy je jako pominięte) niż utratę. Filtr tematu NFZ działa tylko na pierwszej stronie, więc się na nim nie opieramy.
+- **ezdrowie.gov.pl:** zamiast strony HTML (3 wpisy) źródło czyta endpoint, z którego strona ładuje listę: `/Artykuły/ListaArtykulow1/30/*/*/40` (JSON, 40 najnowszych w kategorii „Dla Podmiotów Leczniczych”). Nowy format listy `Json` (pola zamiast selektorów CSS, `LinkTemplate` dla adresu artykułu). Klucze wpisów są te same co z HTML.
+- **Limit i ostrzeżenie:** najwyżej `MaxListPages` = 10 stron na sprawdzenie. Gdy nie da się dojść do znanego wpisu (brak kolejnej strony albo limit), sprawdzenie jest udane, ale z **ostrzeżeniem** („część wpisów mogła zostać pominięta”) w historii pobrań, uruchomieniach, stanie źródła i logu — nie cicha utrata. W etapie 4 można dodać push.
+- **Walidatory HTTP tylko dla „całej strony”.** Listy są pobierane zawsze w całości (jedno żądanie): nie da się dowieść, że ETag gov.pl (`W/"…"`, wygląda na hash treści) zmienia się razem z listą, a 304 w złym momencie ukryłby nowe wpisy.
+- **Do etapu 3:** ostrzeżenie znika ze stanu źródła po następnym czystym sprawdzeniu — raport dzienny powinien brać ostrzeżenia z `source_snapshots` dnia do sekcji „Stan źródeł”.
+- **Treść wpisów:** limit pobrań treści podniesiony do 100 na źródło w jednym sprawdzeniu, żeby przy wielu nowościach raport miał treść wszystkich.
+- **Sprawdzone na żywo (17.11.2026):** CSIRT ze stanem bazowym z 2. strony → sprawdzenie od 1. strony przeszło na 2., zatrzymało się na znanym wpisie: 5 nowych (bez wyróżnionego duplikatu), bez ostrzeżenia. Komunikaty DI bez znanych wpisów → lista zapasowa (archiwum), wpisy od 16.11, treść pobrana dla wszystkich. Po poprawkach dwa pełne przebiegi 23 źródeł: 0 błędów, 0 nowych, 1 strona na źródło. Endpoint JSON ezdrowie pokazał 5 wpisów z 16.11 — strona HTML (3 wpisy) pominęłaby m.in. „Planowane prace techniczne w dniach 16-20.11.2026” i przerwę SSOZ II.
+- **Nie sprawdzone:** limit 10 stron i przejście przez kilka stron archiwum NFZ (tylko logika i testy jednej strony).
+- **Aktualizacja konfiguracji na istniejącej instalacji:** lista domyślna nie nadpisuje źródeł z bazy; po aktualizacji aplikacji z nowymi selektorami: `--apply-default-sources [slug]` (zmienione źródła dostają nowy stan bazowy).

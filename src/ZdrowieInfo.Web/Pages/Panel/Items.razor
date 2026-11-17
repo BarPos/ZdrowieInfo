@@ -1,0 +1,89 @@
+@page "/panel/wpisy"
+@rendermode InteractiveServer
+@using Microsoft.EntityFrameworkCore
+@using ZdrowieInfo.Server.Data
+@using ZdrowieInfo.Server.Sources
+@inject IDbContextFactory<ZdrowieInfoDbContext> DbFactory
+@inject IDialogService Dialogs
+
+<PageTitle>Wpisy – ZdrowieInfo</PageTitle>
+
+<AdminShell>
+    <MudText Typo="Typo.h4" Class="mb-2">Wykryte wpisy</MudText>
+    <MudText Typo="Typo.body2" Class="mb-4">Nowe i zaktualizowane wpisy oraz zmiany stron, które trafią do raportu dziennego (etap 3).</MudText>
+    <MudStack Row="true" Spacing="3" AlignItems="AlignItems.Center" Wrap="Wrap.Wrap" Class="mb-2">
+        <MudSelect T="int?" Value="sourceId" ValueChanged="SourceChanged" Label="Źródło" Clearable="true" Style="min-width:280px" Dense="true">
+            @foreach (var s in sources)
+            {
+                <MudSelectItem T="int?" Value="s.Id">@s.Name</MudSelectItem>
+            }
+        </MudSelect>
+        <MudSwitch T="bool" Value="showBaseline" ValueChanged="BaselineChanged" Color="Color.Primary" Label="Pokaż wpisy ze stanu bazowego" />
+    </MudStack>
+    <MudDataGrid T="Row" Items="rows" Dense="true" Hover="true" Loading="rows is null" RowClick="@(e => Show(e.Item))">
+        <NoRecordsContent>
+            <MudText>Brak wpisów. Nowe pojawią się po kolejnych sprawdzeniach (zastane wpisy to stan bazowy).</MudText>
+        </NoRecordsContent>
+        <Columns>
+            <PropertyColumn Property="r => Labels.Time(r.Item.LastChangedAt)" Title="Wykryto" />
+            <PropertyColumn Property="r => r.Source" Title="Źródło" />
+            <PropertyColumn Property="r => Labels.Date(r.Item.PublishedOn)" Title="Data" />
+            <TemplateColumn Title="Tytuł">
+                <CellTemplate>
+                    @context.Item.Item.Title
+                    @if (context.Item.Item.UpdateCount > 0)
+                    {
+                        <MudChip T="string" Size="Size.Small" Color="Color.Info">aktualizacja</MudChip>
+                    }
+                    @if (context.Item.Item.Kind == SourceItemKind.PageChange)
+                    {
+                        <MudChip T="string" Size="Size.Small" Color="Color.Secondary">zmiana strony</MudChip>
+                    }
+                    @if (context.Item.Item.IsBaseline)
+                    {
+                        <MudChip T="string" Size="Size.Small">stan bazowy</MudChip>
+                    }
+                </CellTemplate>
+            </TemplateColumn>
+        </Columns>
+        <PagerContent>
+            <MudDataGridPager T="Row" PageSizeOptions="[25, 50, 100]" RowsPerPageString="Wierszy na stronę:" />
+        </PagerContent>
+    </MudDataGrid>
+</AdminShell>
+
+@code {
+    private sealed record Row(SourceItem Item, string Source);
+    private sealed record SourceOption(int Id, string Name);
+
+    private List<Row>? rows;
+    private List<SourceOption> sources = [];
+    private int? sourceId;
+    private bool showBaseline;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        sources = await db.Sources.AsNoTracking().OrderBy(s => s.Name).Select(s => new SourceOption(s.Id, s.Name)).ToListAsync();
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        var query = from i in db.SourceItems.AsNoTracking()
+                    join s in db.Sources on i.SourceId equals s.Id
+                    where (showBaseline || !i.IsBaseline) && (sourceId == null || i.SourceId == sourceId)
+                    orderby i.LastChangedAt descending, i.Id descending
+                    select new Row(i, s.Name);
+        rows = await query.Take(500).ToListAsync();
+    }
+
+    private async Task SourceChanged(int? value) { sourceId = value; await LoadAsync(); }
+
+    private async Task BaselineChanged(bool value) { showBaseline = value; await LoadAsync(); }
+
+    private Task Show(Row row) =>
+        Dialogs.ShowAsync<ItemDialog>(row.Item.Title, new DialogParameters<ItemDialog> { { x => x.Item, row.Item } },
+            new DialogOptions { MaxWidth = MaxWidth.Large, FullWidth = true, CloseButton = true });
+}

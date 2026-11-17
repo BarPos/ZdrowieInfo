@@ -1,20 +1,30 @@
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Time.Testing;
 using ZdrowieInfo.Server.Accounts;
+using ZdrowieInfo.Server.Sources.Fetching;
 
 namespace ZdrowieInfo.Server.Tests.Infrastructure;
 
 /// <summary>Aplikacja w pamięci na własnej bazie i własnym katalogu danych (klucze Data Protection).</summary>
-public sealed class AppFactory(string connectionString, string dataDirectory) : WebApplicationFactory<Program>
+public sealed class AppFactory(string connectionString, string dataDirectory, FakeTimeProvider? time) : WebApplicationFactory<Program>
 {
     public string DataDirectory { get; } = dataDirectory;
 
-    public static async Task<AppFactory> CreateAsync(PostgresFixture postgres, string? dataDirectory = null, string? connectionString = null)
+    /// <summary>Wszystkie żądania do źródeł idą tutaj – nigdy do internetu.</summary>
+    public FakeHttp Http { get; } = new();
+
+    /// <summary>Sztuczny zegar, jeśli test go podał (inaczej czas systemowy).</summary>
+    public FakeTimeProvider? Time { get; } = time;
+
+    public static async Task<AppFactory> CreateAsync(PostgresFixture postgres, string? dataDirectory = null, string? connectionString = null,
+        FakeTimeProvider? time = null)
     {
         var dir = dataDirectory ?? Directory.CreateTempSubdirectory("zdrowieinfo-test-").FullName;
-        var factory = new AppFactory(connectionString ?? await postgres.CreateDatabaseAsync(), dir);
-        _ = factory.Server; // start + migracje
+        var factory = new AppFactory(connectionString ?? await postgres.CreateDatabaseAsync(), dir, time);
+        _ = factory.Server; // start + migracje + lista źródeł
         return factory;
     }
 
@@ -28,6 +38,15 @@ public sealed class AppFactory(string connectionString, string dataDirectory) : 
         builder.UseSetting("ZdrowieInfo:PublicUrl", "https://localhost");
         builder.UseSetting("ZdrowieInfo:DataDirectory", DataDirectory);
         builder.UseSetting("Logging:LogLevel:Default", "Warning");
+        builder.UseSetting("ZdrowieInfo:Sources:SchedulerEnabled", "false");
+        builder.UseSetting("ZdrowieInfo:Sources:MinDelayPerHost", "00:00:00");
+        builder.UseSetting("ZdrowieInfo:Sources:MaxDelayPerHost", "00:00:00");
+
+        builder.ConfigureTestServices(services =>
+        {
+            if (Time is not null) services.AddSingleton<TimeProvider>(Time);
+            services.AddHttpClient(SourceFetcher.HttpClientName).ConfigurePrimaryHttpMessageHandler(() => Http);
+        });
     }
 
     /// <summary>Klient HTTPS (ciasteczka mają Secure), bez automatycznych przekierowań, z ciasteczkami.</summary>

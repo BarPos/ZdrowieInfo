@@ -1,0 +1,434 @@
+[
+  {
+    "slug": "nfz-aktualnosci",
+    "name": "NFZ – Aktualności dla świadczeniodawców",
+    "url": "https://www.nfz.gov.pl/dla-swiadczeniodawcy/aktualnosci",
+    "group": "Daily",
+    "method": "List",
+    "notes": "Główne źródło przerw i zmian. Blok 10 najnowszych bez stronicowania: przy przepełnieniu lista zapasowa = archiwum Aktualności Centrali (wszystkie tematy).",
+    "selectors": {
+      "item": ".news-list .news, .news-priority-slider .priority-slider",
+      "title": "h3.title a, .slider-title a",
+      "link": "h3.title a, .slider-title a",
+      "date": ".date",
+      "summary": ".desc, .slider-description",
+      "detailContent": ".news-module",
+      "detailRemove": [
+        ".module-btns",
+        ".print"
+      ],
+      "remove": [],
+      "nextPage": ".pager li.active + li a",
+      "overflowUrl": "https://www.nfz.gov.pl/aktualnosci/aktualnosci-centrali/"
+    }
+  },
+  {
+    "slug": "ezdrowie-podmioty",
+    "name": "ezdrowie.gov.pl – dla podmiotów leczniczych",
+    "url": "https://ezdrowie.gov.pl/Artyku%C5%82y/ListaArtykulow1/30/*/*/40",
+    "group": "Daily",
+    "method": "List",
+    "notes": "Przerwy w P1 i PUI. Lista z API strony (kategoria 30 „Dla Podmiotów Leczniczych”, 40 najnowszych) – strona HTML pokazuje tylko 3.",
+    "selectors": {
+      "format": "Json",
+      "item": "articleDTOList",
+      "title": "title",
+      "link": "url",
+      "linkTemplate": "https://ezdrowie.gov.pl/portal/artykul/{0}",
+      "date": "addDate",
+      "summary": "shortcutContent",
+      "remove": [],
+      "detailContent": ".articleMod",
+      "detailRemove": []
+    }
+  },
+  {
+    "slug": "csirt-cez",
+    "name": "CSIRT CeZ – wszystkie aktualności",
+    "url": "https://csirt.cez.gov.pl/pl/wszystkie-aktualnosci",
+    "group": "Daily",
+    "method": "List",
+    "notes": "Ostrzeżenia KSC. Selektor obejmuje listę główną, bez bloku „Polecane”.",
+    "selectors": {
+      "item": ".teaser",
+      "title": ".views-field-field-title",
+      "link": ".views-field-view-node a",
+      "date": "time",
+      "dateAttribute": "datetime",
+      "detailContent": ".field--name-field-lead, .field--name-field-content",
+      "remove": [],
+      "detailRemove": [],
+      "nextPage": ".pager__item--next a"
+    }
+  },
+  {
+    "slug": "nfz-mazowsze",
+    "name": "Mazowiecki OW NFZ – aktualności dla świadczeniodawców",
+    "url": "https://nfz-warszawa.pl/dla-swiadczeniodawcow/aktualnosci/",
+    "group": "Daily",
+    "method": "List",
+    "notes": "Ochrona Imperva Incapsula; z łącza domowego zwykły HTTP działa (docs/decyzje.md, D4).",
+    "selectors": {
+      "item": ".news-list .news",
+      "title": "h3.title a",
+      "link": "h3.title a",
+      "date": ".date",
+      "summary": ".desc",
+      "detailContent": ".news-module",
+      "detailRemove": [
+        ".module-btns",
+        ".print"
+      ],
+      "remove": [],
+      "nextPage": ".pager span.active + a"
+    }
+  },
+  {
+    "slug": "mz-cer",
+    "name": "MZ – Centralna e-rejestracja",
+    "url": "https://www.gov.pl/web/zdrowie/centralna-e-rejestracja-cer",
+    "group": "Daily",
+    "method": "Page",
+    "notes": "Data przy tytule nieaktualna – usuwana przed porównaniem.",
+    "selectors": {
+      "content": "#main-content",
+      "remove": [
+        ".main-photo",
+        ".event-date"
+      ],
+      "detailRemove": []
+    }
+  },
+  {
+    "slug": "nfz-walidacje",
+    "name": "NFZ – Walidacje i weryfikacje",
+    "url": "https://www.nfz.gov.pl/dla-swiadczeniodawcy/sprawozdawczosc-elektroniczna/walidacje-i-weryfikacje/",
+    "group": "Daily",
+    "method": "List",
+    "notes": "CWW/CRW; wpisy mają te same tytuły – klucz to URL.",
+    "selectors": {
+      "item": ".news-list .news",
+      "title": "h3.title a",
+      "link": "h3.title a",
+      "date": ".date",
+      "summary": ".desc",
+      "detailContent": ".news-module",
+      "detailRemove": [
+        ".module-btns",
+        ".print"
+      ],
+      "remove": [],
+      "nextPage": ".pager li.active + li a"
+    }
+  },
+  {
+    "slug": "nfz-slowniki",
+    "name": "NFZ – Słowniki",
+    "url": "https://www.nfz.gov.pl/dla-swiadczeniodawcy/slowniki/",
+    "group": "Daily",
+    "method": "List",
+    "notes": "ICD-9, harmonogramy. Blok 10 najnowszych bez stronicowania: przy przepełnieniu lista zapasowa = archiwum Aktualności Centrali (wszystkie tematy).",
+    "selectors": {
+      "item": ".news-list .news, .news-priority-slider .priority-slider",
+      "title": "h3.title a, .slider-title a",
+      "link": "h3.title a, .slider-title a",
+      "date": ".date",
+      "summary": ".desc, .slider-description",
+      "detailContent": ".news-module",
+      "detailRemove": [
+        ".module-btns",
+        ".print"
+      ],
+      "remove": [],
+      "nextPage": ".pager li.active + li a",
+      "overflowUrl": "https://www.nfz.gov.pl/aktualnosci/aktualnosci-centrali/"
+    }
+  },
+  {
+    "slug": "mz-komunikaty",
+    "name": "MZ – Komunikaty",
+    "url": "https://www.gov.pl/web/zdrowie/komunikaty1",
+    "group": "Weekly",
+    "method": "List",
+    "notes": "Dużo tematów spoza zakresu.",
+    "selectors": {
+      "item": ".art-prev li",
+      "title": ".title a",
+      "link": ".title a",
+      "date": ".date",
+      "summary": ".intro",
+      "detailContent": "#main-content",
+      "detailRemove": [
+        ".main-photo"
+      ],
+      "remove": [],
+      "nextPage": "a.pagination__arrow-right"
+    }
+  },
+  {
+    "slug": "cez-aktualnosci",
+    "name": "CeZ – Aktualności",
+    "url": "https://www.cez.gov.pl/pl/page/o-nas/aktualnosci",
+    "group": "Weekly",
+    "method": "List",
+    "notes": null,
+    "selectors": {
+      "item": ".view-content .views-row",
+      "title": ".views-field-title a",
+      "link": ".views-field-title a",
+      "date": "time",
+      "dateAttribute": "datetime",
+      "detailContent": ".node__content",
+      "detailRemove": [
+        ".breadcrumbs-contener",
+        "nav"
+      ],
+      "remove": [],
+      "nextPage": ".pager__item--next a"
+    }
+  },
+  {
+    "slug": "nfz-di-komunikaty",
+    "name": "NFZ – Komunikaty Departamentu Informatyki",
+    "url": "https://www.nfz.gov.pl/dla-swiadczeniodawcy/sprawozdawczosc-elektroniczna/komunikaty-departamentu-informatyki/",
+    "group": "Weekly",
+    "method": "List",
+    "notes": "Pokrywa się z Aktualnościami NFZ (te same URL-e). Blok 10 najnowszych bez stronicowania: przy przepełnieniu lista zapasowa = archiwum Aktualności Centrali (wszystkie tematy).",
+    "selectors": {
+      "item": ".news-list .news, .news-priority-slider .priority-slider",
+      "title": "h3.title a, .slider-title a",
+      "link": "h3.title a, .slider-title a",
+      "date": ".date",
+      "summary": ".desc, .slider-description",
+      "detailContent": ".news-module",
+      "detailRemove": [
+        ".module-btns",
+        ".print"
+      ],
+      "remove": [],
+      "nextPage": ".pager li.active + li a",
+      "overflowUrl": "https://www.nfz.gov.pl/aktualnosci/aktualnosci-centrali/"
+    }
+  },
+  {
+    "slug": "nfz-swiad",
+    "name": "Komunikat SWIAD",
+    "url": "https://www.nfz.gov.pl/dla-swiadczeniodawcy/sprawozdawczosc-elektroniczna/lista-typow-komunikatow-xml/komunikat-swiad/",
+    "group": "Monthly",
+    "method": "Page",
+    "notes": null,
+    "selectors": {
+      "content": ".module-content .site-text",
+      "remove": [
+        ".module-btns",
+        ".print",
+        ".search-filters"
+      ],
+      "detailRemove": []
+    }
+  },
+  {
+    "slug": "nfz-dekl",
+    "name": "Komunikat DEKL",
+    "url": "https://www.nfz.gov.pl/dla-swiadczeniodawcy/sprawozdawczosc-elektroniczna/lista-typow-komunikatow-xml/komunikat-dekl/",
+    "group": "Monthly",
+    "method": "Page",
+    "notes": null,
+    "selectors": {
+      "content": ".module-content .site-text",
+      "remove": [
+        ".module-btns",
+        ".print",
+        ".search-filters"
+      ],
+      "detailRemove": []
+    }
+  },
+  {
+    "slug": "nfz-liocz",
+    "name": "Komunikat LIOCZ",
+    "url": "https://www.nfz.gov.pl/dla-swiadczeniodawcy/sprawozdawczosc-elektroniczna/lista-typow-komunikatow-xml/komunikat-liocz/",
+    "group": "Monthly",
+    "method": "Page",
+    "notes": null,
+    "selectors": {
+      "content": ".module-content .site-text",
+      "remove": [
+        ".module-btns",
+        ".print",
+        ".search-filters"
+      ],
+      "detailRemove": []
+    }
+  },
+  {
+    "slug": "nfz-kol",
+    "name": "Komunikat KOL",
+    "url": "https://www.nfz.gov.pl/dla-swiadczeniodawcy/sprawozdawczosc-elektroniczna/lista-typow-komunikatow-xml/komunikat-kol/",
+    "group": "Monthly",
+    "method": "Page",
+    "notes": null,
+    "selectors": {
+      "content": ".module-content .site-text",
+      "remove": [
+        ".module-btns",
+        ".print",
+        ".search-filters"
+      ],
+      "detailRemove": []
+    }
+  },
+  {
+    "slug": "nfz-umx",
+    "name": "Komunikat UMX",
+    "url": "https://www.nfz.gov.pl/dla-swiadczeniodawcy/sprawozdawczosc-elektroniczna/lista-typow-komunikatow-xml/komunikat-umx/",
+    "group": "Monthly",
+    "method": "Page",
+    "notes": "UMX 4.2 od 1.01.2027.",
+    "selectors": {
+      "content": ".module-content .site-text",
+      "remove": [
+        ".module-btns",
+        ".print",
+        ".search-filters"
+      ],
+      "detailRemove": []
+    }
+  },
+  {
+    "slug": "nfz-simp",
+    "name": "Interfejs SIMP",
+    "url": "https://www.nfz.gov.pl/dla-swiadczeniodawcy/sprawozdawczosc-elektroniczna/interfejsy-integracyjne/simp/",
+    "group": "Monthly",
+    "method": "Page",
+    "notes": null,
+    "selectors": {
+      "content": ".module-content .site-text",
+      "remove": [
+        ".module-btns",
+        ".print",
+        ".search-filters"
+      ],
+      "detailRemove": []
+    }
+  },
+  {
+    "slug": "nfz-zbpoz",
+    "name": "Komunikat ZBPOZ",
+    "url": "https://www.nfz.gov.pl/dla-swiadczeniodawcy/sprawozdawczosc-elektroniczna/lista-typow-komunikatow-xml/komunikat-zbpoz/",
+    "group": "Bimonthly",
+    "method": "Page",
+    "notes": null,
+    "selectors": {
+      "content": ".module-content .site-text",
+      "remove": [
+        ".module-btns",
+        ".print",
+        ".search-filters"
+      ],
+      "detailRemove": []
+    }
+  },
+  {
+    "slug": "nfz-efaktury",
+    "name": "Komunikat e-Faktury",
+    "url": "https://www.nfz.gov.pl/dla-swiadczeniodawcy/sprawozdawczosc-elektroniczna/lista-typow-komunikatow-xml/komunikat-e-faktury-e-faktura-e-rachunek/",
+    "group": "Bimonthly",
+    "method": "Page",
+    "notes": null,
+    "selectors": {
+      "content": ".module-content .site-text",
+      "remove": [
+        ".module-btns",
+        ".print",
+        ".search-filters"
+      ],
+      "detailRemove": []
+    }
+  },
+  {
+    "slug": "nfz-sproz",
+    "name": "Komunikat SP_ROZ",
+    "url": "https://www.nfz.gov.pl/dla-swiadczeniodawcy/sprawozdawczosc-elektroniczna/lista-typow-komunikatow-xml/komunikat-sproz/",
+    "group": "Bimonthly",
+    "method": "Page",
+    "notes": null,
+    "selectors": {
+      "content": ".module-content .site-text",
+      "remove": [
+        ".module-btns",
+        ".print",
+        ".search-filters"
+      ],
+      "detailRemove": []
+    }
+  },
+  {
+    "slug": "nfz-dilo",
+    "name": "Interfejs DiLO",
+    "url": "https://www.nfz.gov.pl/dla-swiadczeniodawcy/sprawozdawczosc-elektroniczna/interfejsy-integracyjne/dilo/",
+    "group": "Bimonthly",
+    "method": "Page",
+    "notes": null,
+    "selectors": {
+      "content": ".module-content .site-text",
+      "remove": [
+        ".module-btns",
+        ".print",
+        ".search-filters"
+      ],
+      "detailRemove": []
+    }
+  },
+  {
+    "slug": "nfz-ewus",
+    "name": "Interfejs eWUŚ",
+    "url": "https://www.nfz.gov.pl/dla-swiadczeniodawcy/sprawozdawczosc-elektroniczna/interfejsy-integracyjne/ewus/",
+    "group": "Bimonthly",
+    "method": "Page",
+    "notes": null,
+    "selectors": {
+      "content": ".module-content .site-text",
+      "remove": [
+        ".module-btns",
+        ".print",
+        ".search-filters"
+      ],
+      "detailRemove": []
+    }
+  },
+  {
+    "slug": "nfz-kolce",
+    "name": "Interfejs KOLCE",
+    "url": "https://www.nfz.gov.pl/dla-swiadczeniodawcy/sprawozdawczosc-elektroniczna/interfejsy-integracyjne/kolce/",
+    "group": "Bimonthly",
+    "method": "Page",
+    "notes": null,
+    "selectors": {
+      "content": ".module-content .site-text",
+      "remove": [
+        ".module-btns",
+        ".print",
+        ".search-filters"
+      ],
+      "detailRemove": []
+    }
+  },
+  {
+    "slug": "nfz-opieka-koordynowana",
+    "name": "Opieka koordynowana w POZ",
+    "url": "https://www.nfz.gov.pl/dla-swiadczeniodawcy/opieka-koordynowana-w-poz/",
+    "group": "Bimonthly",
+    "method": "Page",
+    "notes": null,
+    "selectors": {
+      "content": ".module-content .site-text",
+      "remove": [
+        ".module-btns",
+        ".print",
+        ".search-filters"
+      ],
+      "detailRemove": []
+    }
+  }
+]

@@ -6,7 +6,7 @@ Aplikacja codziennie sprawdza publiczne strony NFZ, CeZ, MZ i CSIRT CeZ, wykrywa
 - Kolejność prac i stan etapów: [Plan implementacji ZdrowieInfo.md](Plan%20implementacji%20ZdrowieInfo.md)
 - Decyzje techniczne: [docs/decyzje.md](docs/decyzje.md)
 
-**Stan:** etap 1 (szkielet) — logowanie z hasłem, obowiązkowym TOTP i opcjonalnym passkey, sesja 30 dni, PWA, panel, instalator. Źródła i raporty: etapy 2–3.
+**Stan:** etap 1 (logowanie z TOTP i passkey, PWA, instalator) i etap 2 (23 źródła, wykrywanie zmian, incydenty, harmonogram 5:00, panel źródeł). Raporty z Claude: etap 3.
 
 ## Układ repozytorium
 
@@ -36,7 +36,7 @@ cd src/ZdrowieInfo.Server && dotnet run -- --create-user admin
 cd src/ZdrowieInfo.Server && dotnet run
 ```
 
-Aplikacja: <http://localhost:5180>. Przy pierwszym logowaniu poprosi o skonfigurowanie aplikacji uwierzytelniającej. Dane lokalne (klucze Data Protection) trafiają do `.dev-data/` (poza gitem).
+Aplikacja: <http://localhost:5180>. Harmonogram źródeł jest lokalnie wyłączony (żeby każde uruchomienie nie odpytywało stron) — źródła sprawdzisz poleceniem `dotnet run -- --check-now` albo w panelu. Przy pierwszym logowaniu poprosi o skonfigurowanie aplikacji uwierzytelniającej. Dane lokalne (klucze Data Protection) trafiają do `.dev-data/` (poza gitem).
 
 Testy (wymagają działającego Dockera):
 
@@ -85,6 +85,9 @@ cd /opt/zdrowieinfo && sudo -u zdrowieinfo env $(sudo grep -v '^#' /etc/zdrowiei
 | `--create-user <login>` | tworzy konto; hasło (min. 12 znaków) z terminala albo ze standardowego wejścia |
 | `--set-password <login>` | nowe hasło, odblokowanie konta; zalogowane urządzenia wylogowane w ciągu 5 minut |
 | `--reset-mfa <login>` | awaryjnie: wyłącza TOTP, usuwa passkey, odblokowuje konto; zalogowane urządzenia wylogowane w ciągu 5 minut |
+| `--check-sources [slug]` | próba selektorów na żywych stronach, bez zapisu |
+| `--check-now [slug]` | sprawdza źródła teraz i zapisuje wynik (jak harmonogram) |
+| `--apply-default-sources [slug]` | przywraca adresy i selektory z listy domyślnej (np. po aktualizacji aplikacji); zmienione źródła dostają nowy stan bazowy |
 
 Rejestracja w aplikacji jest wyłączona.
 

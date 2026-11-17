@@ -120,6 +120,8 @@ Gotowe, gdy: aplikacja działa na VPS za Twoim reverse proxy, instalujesz PWA na
 
 ### Etap 2 — Źródła i wykrywanie zmian (L)
 
+**Kod gotowy 17.11.2026** — [docs/decyzje.md](docs/decyzje.md) (D11–D15, w tym przechodzenie po wielu stronach list). Stan bazowy i drugie sprawdzenie na żywo bez fałszywych alarmów; kryterium „tydzień bez fałszywych alarmów” wymaga uruchomienia na VPS. Playwright odłożony (D4).
+
 Najważniejszy etap jakościowo: od niego zależy, czy aplikacja nie milczy.
 
 **2a. Dane i konfiguracja źródeł**

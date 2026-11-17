@@ -1,6 +1,6 @@
 namespace ZdrowieInfo.Server.Hosting;
 
-internal enum CliCommandKind { Run, MigrateOnly, CreateUser, SetPassword, ResetMfa, Invalid }
+internal enum CliCommandKind { Run, MigrateOnly, CreateUser, SetPassword, ResetMfa, CheckSources, CheckNow, ApplyDefaultSources, Invalid }
 
 internal sealed record CliCommand(CliCommandKind Kind, string? Login = null, string? Error = null)
 {
@@ -11,6 +11,9 @@ internal sealed record CliCommand(CliCommandKind Kind, string? Login = null, str
           ZdrowieInfo.Server --create-user <login>   tworzy konto (hasło ze standardowego wejścia)
           ZdrowieInfo.Server --set-password <login>  ustawia nowe hasło i unieważnia sesje
           ZdrowieInfo.Server --reset-mfa <login>     awaryjnie wyłącza TOTP i passkey, odblokowuje konto
+          ZdrowieInfo.Server --check-sources [slug]  próba selektorów na żywo, bez zapisu (wszystkie albo jedno źródło)
+          ZdrowieInfo.Server --check-now [slug]      sprawdza źródła teraz i zapisuje wynik (jak harmonogram)
+          ZdrowieInfo.Server --apply-default-sources [slug]  przywraca adresy i selektory z listy domyślnej (nowy stan bazowy)
         """;
 
     private static readonly Dictionary<string, CliCommandKind> WithLogin = new(StringComparer.Ordinal)
@@ -30,6 +33,17 @@ internal sealed record CliCommand(CliCommandKind Kind, string? Login = null, str
             if (args[i] == "--migrate-only")
             {
                 current = new CliCommand(CliCommandKind.MigrateOnly);
+            }
+            else if (args[i] is "--check-sources" or "--check-now" or "--apply-default-sources")
+            {
+                var kindOptional = args[i] switch
+                {
+                    "--check-sources" => CliCommandKind.CheckSources,
+                    "--check-now" => CliCommandKind.CheckNow,
+                    _ => CliCommandKind.ApplyDefaultSources,
+                };
+                var slug = i + 1 < args.Length && !args[i + 1].StartsWith("--", StringComparison.Ordinal) ? args[++i] : null;
+                current = new CliCommand(kindOptional, slug);
             }
             else if (WithLogin.TryGetValue(args[i], out var kind))
             {

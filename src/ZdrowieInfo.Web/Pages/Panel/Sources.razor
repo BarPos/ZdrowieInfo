@@ -1,0 +1,89 @@
+@page "/panel/zrodla"
+@rendermode InteractiveServer
+@using Microsoft.EntityFrameworkCore
+@using ZdrowieInfo.Server.Data
+@using ZdrowieInfo.Server.Sources
+@using ZdrowieInfo.Server.Sources.Checking
+@inject IDbContextFactory<ZdrowieInfoDbContext> DbFactory
+@inject SourceCheckService Checker
+@inject SourceAdminService Admin
+@inject ISnackbar Snackbar
+
+<PageTitle>Źródła – ZdrowieInfo</PageTitle>
+
+<AdminShell>
+    <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween" Class="mb-2">
+        <MudText Typo="Typo.h4">Źródła</MudText>
+        <MudButton Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.Refresh" Disabled="busy" OnClick="CheckAll">Sprawdź wszystkie teraz</MudButton>
+    </MudStack>
+    @if (busy)
+    {
+        <MudProgressLinear Indeterminate="true" Color="Color.Primary" Class="mb-2" />
+    }
+    <MudDataGrid T="Row" Items="rows" Dense="true" Hover="true" SortMode="SortMode.Single" Loading="rows is null">
+        <Columns>
+            <TemplateColumn Title="Źródło" SortBy="@(r => r.Source.Name)">
+                <CellTemplate>
+                    <MudLink Href="@($"panel/zrodla/{context.Item.Source.Id}")">@context.Item.Source.Name</MudLink>
+                    @if (!context.Item.Source.IsActive)
+                    {
+                        <MudChip T="string" Size="Size.Small" Class="ml-1">wyłączone</MudChip>
+                    }
+                </CellTemplate>
+            </TemplateColumn>
+            <PropertyColumn Property="r => Labels.Of(r.Source.Group)" Title="Częstotliwość" />
+            <PropertyColumn Property="r => Labels.Of(r.Source.Method)" Title="Metoda" />
+            <TemplateColumn Title="Stan" SortBy="@(r => r.Source.Status)">
+                <CellTemplate>
+                    <MudTooltip Text="@(context.Item.Source.StatusMessage ?? "")">
+                        <MudChip T="string" Size="Size.Small" Color="Labels.ColorOf(context.Item.Source.Status)">@Labels.Of(context.Item.Source.Status)</MudChip>
+                    </MudTooltip>
+                </CellTemplate>
+            </TemplateColumn>
+            <PropertyColumn Property="r => Labels.Time(r.Source.LastSuccessAt)" Title="Ostatni sukces" />
+            <PropertyColumn Property="r => r.Items" Title="Wpisy" />
+            <TemplateColumn Title="" Sortable="false">
+                <CellTemplate>
+                    <MudButton Size="Size.Small" Variant="Variant.Text" Disabled="busy || context.Item.Source.FetchMode == FetchMode.Manual" OnClick="() => CheckOne(context.Item.Source)">Sprawdź</MudButton>
+                </CellTemplate>
+            </TemplateColumn>
+        </Columns>
+    </MudDataGrid>
+</AdminShell>
+
+@code {
+    private sealed record Row(Source Source, int Items);
+
+    private List<Row>? rows;
+    private bool busy;
+
+    protected override Task OnInitializedAsync() => LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        var counts = await db.SourceItems.GroupBy(i => i.SourceId).Select(g => new { g.Key, Count = g.Count() }).ToDictionaryAsync(x => x.Key, x => x.Count);
+        rows = (await db.Sources.AsNoTracking().OrderBy(s => s.Id).ToListAsync())
+            .Select(s => new Row(s, counts.GetValueOrDefault(s.Id))).ToList();
+    }
+
+    private Task CheckOne(Source source) => RunAsync([source.Id], source.Name);
+
+    private Task CheckAll() => RunAsync(rows!.Where(r => r.Source.IsActive && r.Source.FetchMode != FetchMode.Manual).Select(r => r.Source.Id).ToList(), "wszystkie aktywne");
+
+    private async Task RunAsync(IReadOnlyCollection<int> ids, string what)
+    {
+        busy = true;
+        try
+        {
+            var result = await Checker.RunAsync(ids, CheckRunKind.Manual);
+            Snackbar.Add($"Sprawdzono: {what}. Nowe/zmienione wpisy: {result.NewItems}, błędy: {result.SourcesFailed}.",
+                result.SourcesFailed > 0 ? Severity.Warning : Severity.Success);
+            await LoadAsync();
+        }
+        finally
+        {
+            busy = false;
+        }
+    }
+}

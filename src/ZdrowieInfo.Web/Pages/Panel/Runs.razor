@@ -1,0 +1,79 @@
+@page "/panel/uruchomienia"
+@rendermode InteractiveServer
+@using Microsoft.EntityFrameworkCore
+@using ZdrowieInfo.Server.Data
+@using ZdrowieInfo.Server.Sources
+@inject IDbContextFactory<ZdrowieInfoDbContext> DbFactory
+
+<PageTitle>Uruchomienia – ZdrowieInfo</PageTitle>
+
+<AdminShell>
+    <MudText Typo="Typo.h4" Class="mb-4">Uruchomienia</MudText>
+    <MudDataGrid T="CheckRun" Items="runs" Dense="true" Hover="true" Loading="runs is null" RowClick="@(e => Toggle(e.Item))">
+        <Columns>
+            <PropertyColumn Property="r => Labels.Time(r.StartedAt)" Title="Start" />
+            <PropertyColumn Property="r => Labels.Of(r.Kind)" Title="Rodzaj" />
+            <PropertyColumn Property="r => GroupsText(r)" Title="Grupy" />
+            <PropertyColumn Property="r => Labels.Of(r.Status)" Title="Stan" />
+            <PropertyColumn Property="r => r.SourcesChecked" Title="Źródła" />
+            <PropertyColumn Property="r => r.SourcesFailed" Title="Błędy" />
+            <PropertyColumn Property="r => r.NewItems" Title="Nowe" />
+            <PropertyColumn Property="r => DurationText(r)" Title="Czas" />
+        </Columns>
+        <ChildRowContent>
+            @if (expanded == context.Item.Id)
+            {
+                <MudSimpleTable Dense="true" Class="ma-2">
+                    <thead><tr><th>Źródło</th><th>Wynik</th><th>Wpisy</th><th>Nowe</th><th>Czas</th></tr></thead>
+                    <tbody>
+                        @foreach (var s in details)
+                        {
+                            <tr>
+                                <td><MudLink Href="@($"panel/zrodla/{s.Snapshot.SourceId}")">@s.Name</MudLink></td>
+                                <td>
+                                    @(s.Snapshot.Succeeded ? (s.Snapshot.NotModified ? "OK (bez zmian, 304)" : "OK") : $"{Labels.Of(s.Snapshot.ErrorType)}: {s.Snapshot.ErrorMessage}")
+                                    @if (s.Snapshot.PagesFetched > 1) { <span> · stron: @s.Snapshot.PagesFetched</span> }
+                                    @if (s.Snapshot.Warning is not null) { <MudText Typo="Typo.caption" Color="Color.Warning">@s.Snapshot.Warning</MudText> }
+                                </td>
+                                <td>@s.Snapshot.ItemsFound</td>
+                                <td>@s.Snapshot.NewItems</td>
+                                <td>@s.Snapshot.DurationMs ms</td>
+                            </tr>
+                        }
+                    </tbody>
+                </MudSimpleTable>
+            }
+        </ChildRowContent>
+    </MudDataGrid>
+    <MudText Typo="Typo.caption" Class="mt-2 d-block">Kliknij wiersz, żeby zobaczyć wynik dla każdego źródła. Widoczne ostatnie 100 uruchomień.</MudText>
+</AdminShell>
+
+@code {
+    private sealed record Detail(SourceSnapshot Snapshot, string Name);
+
+    private List<CheckRun>? runs;
+    private long? expanded;
+    private List<Detail> details = [];
+
+    protected override async Task OnInitializedAsync()
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        runs = await db.CheckRuns.AsNoTracking().OrderByDescending(r => r.StartedAt).Take(100).ToListAsync();
+    }
+
+    private static string GroupsText(CheckRun r) => string.Join(", ", r.Groups.Select(Labels.Of));
+
+    private static string DurationText(CheckRun r) => r.FinishedAt is null ? "—" : Labels.Duration(r.FinishedAt.Value - r.StartedAt);
+
+    private async Task Toggle(CheckRun run)
+    {
+        if (expanded == run.Id) { expanded = null; return; }
+        await using var db = await DbFactory.CreateDbContextAsync();
+        details = await (from s in db.SourceSnapshots.AsNoTracking()
+                         join src in db.Sources on s.SourceId equals src.Id
+                         where s.CheckRunId == run.Id
+                         orderby src.Id
+                         select new Detail(s, src.Name)).ToListAsync();
+        expanded = run.Id;
+    }
+}

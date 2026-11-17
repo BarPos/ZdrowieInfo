@@ -1,0 +1,333 @@
+@page "/panel/zrodla/{Id:int}"
+@rendermode InteractiveServer
+@using Microsoft.EntityFrameworkCore
+@using ZdrowieInfo.Server.Data
+@using ZdrowieInfo.Server.Sources
+@using ZdrowieInfo.Server.Sources.Checking
+@inject IDbContextFactory<ZdrowieInfoDbContext> DbFactory
+@inject SourceAdminService Admin
+@inject SourceCheckService Checker
+@inject ISnackbar Snackbar
+@inject IDialogService Dialogs
+
+<PageTitle>@(source?.Name ?? "Źródło") – ZdrowieInfo</PageTitle>
+
+<AdminShell>
+    @if (source is null)
+    {
+        <MudProgressLinear Indeterminate="true" />
+    }
+    else
+    {
+        <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween" Wrap="Wrap.Wrap" Class="mb-2">
+            <MudText Typo="Typo.h4">@source.Name</MudText>
+            <MudStack Row="true" Spacing="1">
+                <MudChip T="string" Color="Labels.ColorOf(source.Status)">@Labels.Of(source.Status)</MudChip>
+                <MudButton Variant="Variant.Outlined" Disabled="busy || source.FetchMode == FetchMode.Manual" OnClick="CheckNow">Sprawdź teraz</MudButton>
+            </MudStack>
+        </MudStack>
+        @if (busy)
+        {
+            <MudProgressLinear Indeterminate="true" Class="mb-2" />
+        }
+        @if (source.StatusMessage is not null)
+        {
+            <MudAlert Severity="Severity.Warning" Class="mb-3">@source.StatusMessage</MudAlert>
+        }
+        <MudText Typo="Typo.body2" Class="mb-4">
+            <MudLink Href="@source.Url" Target="_blank">@source.Url</MudLink><br />
+            Stan bazowy: @Labels.Time(source.BaselineAt) · ostatnie sprawdzenie: @Labels.Time(source.LastCheckedAt) · ostatni sukces: @Labels.Time(source.LastSuccessAt)
+            @if (source.NextRetryAt is not null)
+            {
+                <span> · następna próba: @Labels.Time(source.NextRetryAt)</span>
+            }
+        </MudText>
+
+        <MudTabs Elevation="1" Rounded="true" PanelClass="pa-4">
+            <MudTabPanel Text="Ustawienia i selektory">
+                <MudGrid>
+                    <MudItem xs="12" md="6"><MudTextField T="string" @bind-Value="form.Name" Label="Nazwa" /></MudItem>
+                    <MudItem xs="12" md="6"><MudTextField T="string" @bind-Value="form.Url" Label="Adres strony" /></MudItem>
+                    <MudItem xs="12" sm="4">
+                        <MudSelect T="SourceGroup" @bind-Value="form.Group" Label="Częstotliwość">
+                            @foreach (var g in Enum.GetValues<SourceGroup>())
+                            {
+                                <MudSelectItem T="SourceGroup" Value="g">@Labels.Of(g)</MudSelectItem>
+                            }
+                        </MudSelect>
+                    </MudItem>
+                    <MudItem xs="12" sm="4">
+                        <MudSelect T="SourceMethod" @bind-Value="form.Method" Label="Metoda">
+                            @foreach (var m in Enum.GetValues<SourceMethod>())
+                            {
+                                <MudSelectItem T="SourceMethod" Value="m">@Labels.Of(m)</MudSelectItem>
+                            }
+                        </MudSelect>
+                    </MudItem>
+                    <MudItem xs="12" sm="4">
+                        <MudSelect T="FetchMode" @bind-Value="form.FetchMode" Label="Pobieranie">
+                            <MudSelectItem T="FetchMode" Value="FetchMode.Http">HTTP</MudSelectItem>
+                            <MudSelectItem T="FetchMode" Value="FetchMode.Manual">ręcznie (aplikacja nie pobiera)</MudSelectItem>
+                        </MudSelect>
+                    </MudItem>
+                    @if (form.Method == SourceMethod.List)
+                    {
+                        <MudItem xs="12" sm="4">
+                            <MudSelect T="ListFormat" @bind-Value="form.Format" Label="Format listy">
+                                <MudSelectItem T="ListFormat" Value="ListFormat.Html">HTML (selektory CSS)</MudSelectItem>
+                                <MudSelectItem T="ListFormat" Value="ListFormat.Json">JSON (nazwy pól)</MudSelectItem>
+                            </MudSelect>
+                        </MudItem>
+                        <MudItem xs="12" sm="8"><MudTextField T="string" @bind-Value="form.LinkTemplate" Label="Szablon linku" HelperText="Gdy lista podaje tylko identyfikator, np. https://…/artykul/{0}" /></MudItem>
+                        <MudItem xs="12" md="6"><MudTextField T="string" @bind-Value="form.Item" Label="Wpis (item)" HelperText="@(form.Format == ListFormat.Json ? "Ścieżka do tablicy, np. articleDTOList" : "Element jednego wpisu na liście")" /></MudItem>
+                        <MudItem xs="12" md="6"><MudTextField T="string" @bind-Value="form.Link" Label="Link" HelperText="W obrębie wpisu; puste = pierwszy a[href]" /></MudItem>
+                        <MudItem xs="12" md="4"><MudTextField T="string" @bind-Value="form.Title" Label="Tytuł" HelperText="Puste = tekst linku" /></MudItem>
+                        <MudItem xs="12" md="4"><MudTextField T="string" @bind-Value="form.Date" Label="Data" /></MudItem>
+                        <MudItem xs="12" md="4"><MudTextField T="string" @bind-Value="form.DateAttribute" Label="Atrybut daty" HelperText="Np. datetime; puste = tekst" /></MudItem>
+                        <MudItem xs="12" md="6"><MudTextField T="string" @bind-Value="form.Summary" Label="Opis na liście" /></MudItem>
+                        <MudItem xs="12" md="6"><MudTextField T="string" @bind-Value="form.NextPage" Label="Następna strona" HelperText="Link do kolejnej strony listy – sprawdzanie idzie dalej, dopóki wpisy są nowe" /></MudItem>
+                        <MudItem xs="12" md="6"><MudTextField T="string" @bind-Value="form.OverflowUrl" Label="Lista zapasowa (adres)" HelperText="Gdy lista nie ma kolejnych stron, a wszystkie wpisy są nowe" /></MudItem>
+                        <MudItem xs="12" md="6"><MudTextField T="string" @bind-Value="form.DetailContent" Label="Treść wpisu (strona wpisu)" HelperText="Puste = main / article / body" /></MudItem>
+                        <MudItem xs="12"><MudTextField T="string" @bind-Value="form.DetailRemove" Label="Usuń ze strony wpisu" HelperText="Selektory po jednym w linii" Lines="2" AutoGrow="true" /></MudItem>
+                    }
+                    else
+                    {
+                        <MudItem xs="12"><MudTextField T="string" @bind-Value="form.Content" Label="Główna treść (content)" HelperText="Kilka selektorów po przecinku – łączone" /></MudItem>
+                        <MudItem xs="12"><MudTextField T="string" @bind-Value="form.Remove" Label="Usuń przed porównaniem" HelperText="Baner cookies, przyciski, data aktualizacji… po jednym w linii" Lines="2" AutoGrow="true" /></MudItem>
+                    }
+                    <MudItem xs="12"><MudTextField T="string" @bind-Value="form.Notes" Label="Uwagi" Lines="2" AutoGrow="true" /></MudItem>
+                    <MudItem xs="12"><MudSwitch T="bool" @bind-Value="form.IsActive" Color="Color.Primary" Label="Aktywne" /></MudItem>
+                </MudGrid>
+                <MudStack Row="true" Spacing="2" Class="mt-4">
+                    <MudButton Variant="Variant.Outlined" Disabled="busy" OnClick="Preview">Testuj selektory</MudButton>
+                    <MudButton Variant="Variant.Filled" Color="Color.Primary" Disabled="busy" OnClick="Save">Zapisz</MudButton>
+                </MudStack>
+                <MudText Typo="Typo.caption" Class="mt-2 d-block">Zmiana adresu, metody albo selektorów zapisuje nowy stan bazowy przy następnym sprawdzeniu (bez zgłaszania zastanych wpisów jako nowych).</MudText>
+
+                @if (preview is not null)
+                {
+                    <MudDivider Class="my-4" />
+                    @if (!preview.Success)
+                    {
+                        <MudAlert Severity="Severity.Error">@preview.Error</MudAlert>
+                    }
+                    else if (preview.PageText is not null)
+                    {
+                        <MudText Typo="Typo.subtitle1">Treść strony (@preview.PageText.Length znaków)</MudText>
+                        <pre class="preview-text">@preview.PageText</pre>
+                    }
+                    else
+                    {
+                        @if (preview.Error is not null)
+                        {
+                            <MudAlert Severity="Severity.Warning" Class="mb-2">@preview.Error</MudAlert>
+                        }
+                        <MudText Typo="Typo.subtitle1">Znalezione wpisy: @preview.Items.Count</MudText>
+                        <MudText Typo="Typo.body2" Class="mb-2">
+                            Następna strona:
+                            @if (preview.NextPageUrl is not null)
+                            {
+                                <MudLink Href="@preview.NextPageUrl" Target="_blank">@preview.NextPageUrl</MudLink>
+                            }
+                            else
+                            {
+                                <span>@(string.IsNullOrWhiteSpace(form.NextPage) ? "nie ustawiono selektora" : "selektor nic nie znalazł")</span>
+                            }
+                        </MudText>
+                        <MudSimpleTable Dense="true" Class="mb-4">
+                            <thead><tr><th>Data</th><th>Tytuł</th></tr></thead>
+                            <tbody>
+                                @foreach (var item in preview.Items)
+                                {
+                                    <tr><td>@Labels.Date(item.PublishedOn)</td><td><MudLink Href="@item.Url" Target="_blank">@item.Title</MudLink></td></tr>
+                                }
+                            </tbody>
+                        </MudSimpleTable>
+                        <MudText Typo="Typo.subtitle1">Treść pierwszego wpisu</MudText>
+                        <pre class="preview-text">@preview.DetailText</pre>
+                    }
+                }
+            </MudTabPanel>
+
+            <MudTabPanel Text="@($"Wpisy ({items.Count})")">
+                <MudSimpleTable Dense="true" Hover="true">
+                    <thead><tr><th>Wykryto</th><th>Data</th><th>Tytuł</th><th></th></tr></thead>
+                    <tbody>
+                        @foreach (var item in items)
+                        {
+                            <tr>
+                                <td>@Labels.Time(item.LastChangedAt)</td>
+                                <td>@Labels.Date(item.PublishedOn)</td>
+                                <td>
+                                    <MudLink OnClick="() => ShowItem(item)">@item.Title</MudLink>
+                                    @if (item.UpdateCount > 0)
+                                    {
+                                        <MudChip T="string" Size="Size.Small" Color="Color.Info">aktualizacja</MudChip>
+                                    }
+                                </td>
+                                <td>@(item.IsBaseline ? "stan bazowy" : "")</td>
+                            </tr>
+                        }
+                    </tbody>
+                </MudSimpleTable>
+            </MudTabPanel>
+
+            <MudTabPanel Text="Historia pobrań">
+                <MudSimpleTable Dense="true">
+                    <thead><tr><th>Kiedy</th><th>HTTP</th><th>Wynik</th><th>Wpisy</th><th>Nowe</th><th>Czas</th></tr></thead>
+                    <tbody>
+                        @foreach (var s in snapshots)
+                        {
+                            <tr>
+                                <td>@Labels.Time(s.FetchedAt)</td>
+                                <td>@(s.NotModified ? "304" : s.HttpStatus?.ToString() ?? "—")</td>
+                                <td>
+                                    @(s.Succeeded ? "OK" : $"{Labels.Of(s.ErrorType)}: {s.ErrorMessage}")
+                                    @if (s.PagesFetched > 1) { <span> · stron: @s.PagesFetched</span> }
+                                    @if (s.Warning is not null) { <MudText Typo="Typo.caption" Color="Color.Warning">@s.Warning</MudText> }
+                                </td>
+                                <td>@s.ItemsFound</td>
+                                <td>@s.NewItems</td>
+                                <td>@s.DurationMs ms</td>
+                            </tr>
+                        }
+                    </tbody>
+                </MudSimpleTable>
+            </MudTabPanel>
+
+            <MudTabPanel Text="@($"Incydenty ({incidents.Count})")">
+                @if (incidents.Count == 0)
+                {
+                    <MudText>Brak incydentów.</MudText>
+                }
+                else
+                {
+                    <MudSimpleTable Dense="true">
+                        <thead><tr><th>Początek</th><th>Koniec</th><th>Trwanie</th><th>Typ</th><th>Próby</th><th>Szczegóły</th></tr></thead>
+                        <tbody>
+                            @foreach (var i in incidents)
+                            {
+                                <tr>
+                                    <td>@Labels.Time(i.StartedAt)</td>
+                                    <td>@(i.EndedAt is null ? "trwa" : Labels.Time(i.EndedAt))</td>
+                                    <td>@Labels.Duration((i.EndedAt ?? DateTimeOffset.UtcNow) - i.StartedAt)</td>
+                                    <td>@Labels.Of(i.ErrorType)</td>
+                                    <td>@i.Attempts</td>
+                                    <td>@i.Details</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </MudSimpleTable>
+                }
+            </MudTabPanel>
+        </MudTabs>
+    }
+</AdminShell>
+
+@code {
+    [Parameter] public int Id { get; set; }
+
+    private Source? source;
+    private Form form = new();
+    private List<SourceItem> items = [];
+    private List<SourceSnapshot> snapshots = [];
+    private List<SourceIncident> incidents = [];
+    private SelectorPreview? preview;
+    private bool busy;
+
+    private sealed class Form
+    {
+        public string Name { get; set; } = "";
+        public string Url { get; set; } = "";
+        public SourceGroup Group { get; set; }
+        public SourceMethod Method { get; set; }
+        public FetchMode FetchMode { get; set; }
+        public bool IsActive { get; set; }
+        public string? Notes { get; set; }
+        public string? Item { get; set; }
+        public string? Title { get; set; }
+        public string? Link { get; set; }
+        public string? Date { get; set; }
+        public string? DateAttribute { get; set; }
+        public string? Summary { get; set; }
+        public string? Content { get; set; }
+        public string? Remove { get; set; }
+        public string? DetailContent { get; set; }
+        public string? DetailRemove { get; set; }
+        public ListFormat Format { get; set; }
+        public string? LinkTemplate { get; set; }
+        public string? NextPage { get; set; }
+        public string? OverflowUrl { get; set; }
+
+        public static Form From(Source s) => new()
+        {
+            Name = s.Name, Url = s.Url, Group = s.Group, Method = s.Method, FetchMode = s.FetchMode, IsActive = s.IsActive, Notes = s.Notes,
+            Item = s.Selectors.Item, Title = s.Selectors.Title, Link = s.Selectors.Link, Date = s.Selectors.Date,
+            DateAttribute = s.Selectors.DateAttribute, Summary = s.Selectors.Summary, Content = s.Selectors.Content,
+            Remove = string.Join('\n', s.Selectors.Remove), DetailContent = s.Selectors.DetailContent, DetailRemove = string.Join('\n', s.Selectors.DetailRemove),
+            Format = s.Selectors.Format, LinkTemplate = s.Selectors.LinkTemplate, NextPage = s.Selectors.NextPage, OverflowUrl = s.Selectors.OverflowUrl,
+        };
+
+        public SourceSelectors Selectors() => new()
+        {
+            Item = N(Item), Title = N(Title), Link = N(Link), Date = N(Date), DateAttribute = N(DateAttribute), Summary = N(Summary),
+            Content = N(Content), Remove = Lines(Remove), DetailContent = N(DetailContent), DetailRemove = Lines(DetailRemove),
+            Format = Format, LinkTemplate = N(LinkTemplate), NextPage = N(NextPage), OverflowUrl = N(OverflowUrl),
+        };
+
+        private static string? N(string? v) => string.IsNullOrWhiteSpace(v) ? null : v.Trim();
+
+        private static List<string> Lines(string? v) =>
+            (v ?? "").Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList();
+    }
+
+    protected override Task OnParametersSetAsync() => LoadAsync(resetForm: true);
+
+    private async Task LoadAsync(bool resetForm)
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        source = await db.Sources.AsNoTracking().SingleOrDefaultAsync(s => s.Id == Id);
+        if (source is null) return;
+        if (resetForm) form = Form.From(source);
+        items = await db.SourceItems.AsNoTracking().Where(i => i.SourceId == Id).OrderByDescending(i => i.LastChangedAt).ThenByDescending(i => i.Id).Take(100).ToListAsync();
+        snapshots = await db.SourceSnapshots.AsNoTracking().Where(s => s.SourceId == Id).OrderByDescending(s => s.FetchedAt).Take(30).ToListAsync();
+        incidents = await db.SourceIncidents.AsNoTracking().Where(i => i.SourceId == Id).OrderByDescending(i => i.StartedAt).ToListAsync();
+    }
+
+    private async Task Preview()
+    {
+        busy = true;
+        try { preview = await Admin.PreviewAsync(form.Url, form.Method, form.Selectors()); }
+        finally { busy = false; }
+    }
+
+    private async Task Save()
+    {
+        if (string.IsNullOrWhiteSpace(form.Name) || !Uri.TryCreate(form.Url, UriKind.Absolute, out _))
+        {
+            Snackbar.Add("Podaj nazwę i pełny adres strony.", Severity.Error);
+            return;
+        }
+        var rebaseline = await Admin.UpdateAsync(Id, new SourceAdminService.SourceEdit(
+            form.Name, form.Url, form.Group, form.Method, form.FetchMode, form.IsActive, form.Notes, form.Selectors()));
+        Snackbar.Add(rebaseline ? "Zapisano. Następne sprawdzenie zapisze nowy stan bazowy." : "Zapisano.", Severity.Success);
+        await LoadAsync(resetForm: true);
+    }
+
+    private async Task CheckNow()
+    {
+        busy = true;
+        try
+        {
+            var result = await Checker.RunAsync([Id], CheckRunKind.Manual);
+            Snackbar.Add(result.SourcesFailed > 0 ? "Sprawdzenie nieudane – szczegóły w historii pobrań." : $"Sprawdzono. Nowe/zmienione wpisy: {result.NewItems}.",
+                result.SourcesFailed > 0 ? Severity.Warning : Severity.Success);
+            await LoadAsync(resetForm: false);
+        }
+        finally { busy = false; }
+    }
+
+    private Task ShowItem(SourceItem item) =>
+        Dialogs.ShowAsync<ItemDialog>(item.Title, new DialogParameters<ItemDialog> { { x => x.Item, item } },
+            new DialogOptions { MaxWidth = MaxWidth.Large, FullWidth = true, CloseButton = true });
+}

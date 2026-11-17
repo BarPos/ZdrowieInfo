@@ -2,6 +2,7 @@ using System.Text;
 using Microsoft.AspNetCore.Identity;
 using ZdrowieInfo.Server.Accounts;
 using ZdrowieInfo.Server.Data;
+using ZdrowieInfo.Server.Sources;
 
 namespace ZdrowieInfo.Server.Hosting;
 
@@ -10,11 +11,15 @@ internal static class CliRunner
     public static async Task<int> RunAsync(CliCommand command, IServiceProvider services)
     {
         await DatabaseMigrator.MigrateAsync(services);
+        await services.GetRequiredService<SourceSeeder>().SeedAsync();
         if (command.Kind == CliCommandKind.MigrateOnly)
         {
             Console.WriteLine("Baza danych jest aktualna.");
             return 0;
         }
+        if (command.Kind == CliCommandKind.CheckSources) return await SourceCli.TrySelectorsAsync(services, command.Login);
+        if (command.Kind == CliCommandKind.CheckNow) return await SourceCli.CheckNowAsync(services, command.Login);
+        if (command.Kind == CliCommandKind.ApplyDefaultSources) return await SourceCli.ApplyDefaultsAsync(services, command.Login);
 
         await using var scope = services.CreateAsyncScope();
         var admin = scope.ServiceProvider.GetRequiredService<UserAdminService>();

@@ -1,33 +1,90 @@
 @page "/panel"
 @rendermode InteractiveServer
+@using Microsoft.EntityFrameworkCore
 @using ZdrowieInfo.Server.Common
+@using ZdrowieInfo.Server.Data
+@using ZdrowieInfo.Server.Sources
+@using ZdrowieInfo.Server.Sources.Scheduling
+@using Microsoft.Extensions.Options
+@inject IDbContextFactory<ZdrowieInfoDbContext> DbFactory
 @inject WarsawClock Clock
-@inject ISnackbar Snackbar
+@inject TimeProvider Time
+@inject IOptions<SourcesOptions> SourcesOptions
 
 <PageTitle>Panel – ZdrowieInfo</PageTitle>
 
 <AdminShell>
-    <MudText Typo="Typo.h4" Class="mb-4">Panel</MudText>
-    <MudGrid>
-        <MudItem xs="12" sm="6">
-            <MudPaper Class="pa-4" Elevation="1">
-                <MudText Typo="Typo.subtitle2">Wersja</MudText>
-                <MudText Typo="Typo.h6">@AppVersion.Current</MudText>
-            </MudPaper>
-        </MudItem>
-        <MudItem xs="12" sm="6">
-            <MudPaper Class="pa-4" Elevation="1">
-                <MudText Typo="Typo.subtitle2">Czas serwera (Warszawa)</MudText>
-                <MudText Typo="Typo.h6">@Clock.LocalNow.ToString("dddd, d MMMM yyyy, HH:mm")</MudText>
-            </MudPaper>
-        </MudItem>
-    </MudGrid>
-    <MudAlert Severity="Severity.Info" Class="mt-4">
-        Źródła, uruchomienia, klucze API i ustawienia pojawią się tu w kolejnych etapach.
-    </MudAlert>
-    <MudButton Class="mt-4" Variant="Variant.Outlined" OnClick="Ping">Sprawdź połączenie z panelem</MudButton>
+    <MudText Typo="Typo.h4" Class="mb-4">Przegląd</MudText>
+    @if (loaded)
+    {
+        <MudGrid>
+            <MudItem xs="12" sm="6" md="3">
+                <MudPaper Class="pa-4" Elevation="1">
+                    <MudText Typo="Typo.subtitle2">Źródła</MudText>
+                    <MudText Typo="Typo.h5">@ok / @total OK</MudText>
+                    @if (attention > 0)
+                    {
+                        <MudLink Href="panel/zrodla" Color="Color.Error">@attention wymaga uwagi</MudLink>
+                    }
+                </MudPaper>
+            </MudItem>
+            <MudItem xs="12" sm="6" md="3">
+                <MudPaper Class="pa-4" Elevation="1">
+                    <MudText Typo="Typo.subtitle2">Nowe wpisy (24 h)</MudText>
+                    <MudText Typo="Typo.h5">@newItems</MudText>
+                    <MudLink Href="panel/wpisy">Zobacz wpisy</MudLink>
+                </MudPaper>
+            </MudItem>
+            <MudItem xs="12" sm="6" md="3">
+                <MudPaper Class="pa-4" Elevation="1">
+                    <MudText Typo="Typo.subtitle2">Ostatnie uruchomienie</MudText>
+                    <MudText Typo="Typo.h6">@Labels.Time(lastRun?.StartedAt)</MudText>
+                    @if (lastRun is not null)
+                    {
+                        <MudText Typo="Typo.body2">@Labels.Of(lastRun.Kind), @lastRun.SourcesChecked źródeł, @lastRun.SourcesFailed z błędem</MudText>
+                    }
+                </MudPaper>
+            </MudItem>
+            <MudItem xs="12" sm="6" md="3">
+                <MudPaper Class="pa-4" Elevation="1">
+                    <MudText Typo="Typo.subtitle2">Następne planowe sprawdzenie</MudText>
+                    <MudText Typo="Typo.h6">@next.ToString("dd.MM.yyyy HH:mm")</MudText>
+                    <MudText Typo="Typo.body2">@string.Join(", ", SourceSchedule.GroupsDueOn(DateOnly.FromDateTime(next)).Select(Labels.Of))</MudText>
+                </MudPaper>
+            </MudItem>
+        </MudGrid>
+        @if (!SourcesOptions.Value.SchedulerEnabled)
+        {
+            <MudAlert Severity="Severity.Warning" Class="mt-4">Harmonogram jest wyłączony w konfiguracji (ZdrowieInfo:Sources:SchedulerEnabled) – źródła sprawdzane są tylko ręcznie.</MudAlert>
+        }
+        <MudText Typo="Typo.body2" Class="mt-4">Wersja @AppVersion.Current · czas serwera @Clock.LocalNow.ToString("dddd, d MMMM yyyy, HH:mm")</MudText>
+    }
+    else
+    {
+        <MudProgressLinear Indeterminate="true" />
+    }
 </AdminShell>
 
 @code {
-    private void Ping() => Snackbar.Add("Panel działa interaktywnie.", Severity.Success);
+    private bool loaded;
+    private int total, ok, attention, newItems;
+    private CheckRun? lastRun;
+    private DateTime next;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        var statuses = await db.Sources.Where(s => s.IsActive).Select(s => s.Status).ToListAsync();
+        total = statuses.Count;
+        ok = statuses.Count(s => s == SourceStatus.Ok);
+        attention = statuses.Count(s => s == SourceStatus.NeedsAttention);
+        var since = Time.GetUtcNow().AddDays(-1);
+        newItems = await db.SourceItems.CountAsync(i => !i.IsBaseline && i.LastChangedAt >= since);
+        lastRun = await db.CheckRuns.AsNoTracking().OrderByDescending(r => r.StartedAt).FirstOrDefaultAsync();
+
+        var start = SourcesOptions.Value.DailyCheckTime;
+        var today = Clock.Today;
+        next = (TimeOnly.FromDateTime(Clock.LocalNow) < start ? today : today.AddDays(1)).ToDateTime(start);
+        loaded = true;
+    }
 }

@@ -4,6 +4,7 @@ using Microsoft.Extensions.Options;
 using ZdrowieInfo.Server.Common;
 using ZdrowieInfo.Server.Data;
 using ZdrowieInfo.Server.Export;
+using ZdrowieInfo.Server.Push;
 
 namespace ZdrowieInfo.Server.Reports;
 
@@ -34,6 +35,7 @@ public sealed class DailyReportService(
     TimeProvider time,
     ReportExporter exporter,
     IOptions<ExportOptions> exportOptions,
+    NotificationDispatcher notifications,
     ILogger<DailyReportService> logger)
 {
     /// <summary>
@@ -61,7 +63,11 @@ public sealed class DailyReportService(
     public async Task<ReportRunResult> GenerateAsync(DateOnly date, bool replace = false, bool finalAttempt = true, CancellationToken ct = default)
     {
         var result = await GenerateCoreAsync(date, replace, finalAttempt, ct);
-        if (result.Outcome == ReportRunOutcome.Created) await ExportQuietlyAsync(date);
+        if (result.Outcome == ReportRunOutcome.Created)
+        {
+            await notifications.DispatchPendingAsync(ct); // push od razu, nie czeka na LaTeX
+            await ExportQuietlyAsync(date);
+        }
         return result;
     }
 
@@ -161,7 +167,11 @@ public sealed class DailyReportService(
     public async Task<ExternalReportResult> SaveExternalAsync(DateOnly date, ReportDocument document, string producer, bool replace, CancellationToken ct = default)
     {
         var result = await SaveExternalCoreAsync(date, document, producer, replace, ct);
-        if (result.Outcome == ExternalReportOutcome.Created) await ExportQuietlyAsync(date);
+        if (result.Outcome == ExternalReportOutcome.Created)
+        {
+            await notifications.DispatchPendingAsync(ct);
+            await ExportQuietlyAsync(date);
+        }
         return result;
     }
 

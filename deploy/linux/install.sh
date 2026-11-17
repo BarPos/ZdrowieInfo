@@ -61,6 +61,10 @@ SQL
     chmod 600 "$ENV_FILE"
 fi
 
+# Rozszerzenie do wyszukiwania (etap 6). Migracja tworzy je też sama (unaccent jest „trusted” od PostgreSQL 13, a usługa
+# jest właścicielem bazy), ale jako postgres działa niezależnie od uprawnień roli.
+sudo -u postgres psql -v ON_ERROR_STOP=1 -q -d zdrowieinfo -c "CREATE EXTENSION IF NOT EXISTS unaccent"
+
 # Przy każdej instalacji i aktualizacji (apt pomija już zainstalowane): TeX do raportów PDF – kilkaset MB przy pierwszym razie.
 echo "== TeX do raportów PDF (XeLaTeX, polski, czcionki TeX Gyre)"
 apt-get install -y -qq --no-install-recommends texlive-xetex texlive-lang-polish texlive-latex-extra texlive-fonts-recommended fonts-texgyre latexmk >/dev/null

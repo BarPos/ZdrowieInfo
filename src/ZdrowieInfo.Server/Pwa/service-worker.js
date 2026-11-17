@@ -4,7 +4,7 @@ const STATIC_CACHE = `zi-static-${VERSION}`;
 const PAGES_CACHE = `zi-pages-${VERSION}`;
 
 // Nigdy z cache: logowanie i konto, panel (interaktywny), API, MCP, obwód Blazor.
-const BYPASS = ['/Account', '/panel', '/api', '/mcp', '/_blazor', '/healthz', '/service-worker.js'];
+const BYPASS = ['/Account', '/panel', '/api', '/mcp', '/push', '/_blazor', '/healthz', '/service-worker.js'];
 const STATIC = ['/_framework/', '/_content/', '/icons/', '/css/', '/js/', '/manifest.webmanifest'];
 
 self.addEventListener('install', () => self.skipWaiting());

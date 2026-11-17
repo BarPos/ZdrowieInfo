@@ -1,0 +1,128 @@
+@page "/szukaj"
+@using Microsoft.EntityFrameworkCore
+@using ZdrowieInfo.Server.Data
+@using ZdrowieInfo.Server.Reports
+@using ZdrowieInfo.Server.Search
+@inject ReportSearch Search
+@inject IDbContextFactory<ZdrowieInfoDbContext> DbFactory
+
+<PageTitle>@(string.IsNullOrWhiteSpace(Q) ? "Szukaj" : $"„{Q}” – szukaj") – ZdrowieInfo</PageTitle>
+
+<h1>Szukaj w raportach</h1>
+<form method="get" action="szukaj" class="search-form">
+    <div class="search-box">
+        <input type="search" name="q" value="@Q" placeholder="np. przerwa P1, e-rejestracja, FortiGate" aria-label="Szukana fraza" autofocus="@(string.IsNullOrEmpty(Q))" />
+        <button type="submit" class="btn btn-primary">Szukaj</button>
+    </div>
+    <details class="search-filters" open="@HasFilters">
+        <summary>Filtry</summary>
+        <div class="filters">
+            <label>Od <input type="date" name="od" value="@Od" /></label>
+            <label>Do <input type="date" name="do" value="@Do" /></label>
+            <label>Ważność
+                <select name="waznosc">
+                    <option value="">każda</option>
+                    @foreach (var (key, value) in ReportVocabulary.Importances)
+                    {
+                        <option value="@key" selected="@(Waznosc == key)">@key</option>
+                    }
+                </select>
+            </label>
+            <label>Kategoria
+                <select name="kategoria">
+                    <option value="">każda</option>
+                    @foreach (var (key, value) in ReportVocabulary.Categories)
+                    {
+                        <option value="@key" selected="@(Kategoria == key)">@key</option>
+                    }
+                </select>
+            </label>
+            <label>Źródło
+                <select name="zrodlo">
+                    <option value="">każde</option>
+                    @foreach (var s in sources)
+                    {
+                        <option value="@s.Id" selected="@(Zrodlo == s.Id)">@s.Name</option>
+                    }
+                </select>
+            </label>
+        </div>
+    </details>
+    <p class="muted small">Bez polskich znaków też znajdzie („zrodlo” = „źródło”); fragment słowa łapie odmiany („przerw” → przerwa, przerwy). Fraza w cudzysłowie, „or” między słowami, „-słowo” wyklucza.</p>
+</form>
+
+@if (hits is not null)
+{
+    @if (hits.Count == 0)
+    {
+        <section class="card"><p>Nic nie znaleziono.</p></section>
+    }
+    else
+    {
+        <p class="muted">Wyniki: @hits.Count@(hits.Count >= Limit ? "+" : "")</p>
+        @foreach (var group in hits.GroupBy(h => h.Date).OrderByDescending(g => g.Key))
+        {
+            <section class="search-group">
+                <h2><a href="raporty/@group.Key.ToString("yyyy-MM-dd")">@group.Key.ToString("dddd, d MMMM yyyy")</a> <span class="muted">· @group.First().ReportTitle</span></h2>
+                @foreach (var hit in group)
+                {
+                    <article class="search-hit">
+                        @if (hit.FindingId is not null)
+                        {
+                            <p class="search-meta">
+                                <span class="badge @(hit.Importance == Importance.Critical ? "critical" : hit.Importance == Importance.High ? "high" : "")">@ReportVocabulary.Label(hit.Importance!.Value)</span>
+                                <span class="muted">@ReportVocabulary.Label(hit.Category!.Value)</span>
+                            </p>
+                            <h3><a href="raporty/@hit.Date.ToString("yyyy-MM-dd")">@hit.Headline</a></h3>
+                        }
+                        <p class="search-snippet">@((MarkupString)hit.SnippetHtml)</p>
+                        @if (hit.Sources.Count > 0)
+                        {
+                            <p class="search-sources">
+                                Źródła:
+                                @foreach (var s in hit.Sources)
+                                {
+                                    <a href="@s.Url" target="_blank" rel="noopener">@s.Title</a>
+                                }
+                            </p>
+                        }
+                    </article>
+                }
+            </section>
+        }
+    }
+}
+
+@code {
+    private const int Limit = 100;
+
+    [SupplyParameterFromQuery(Name = "q")] private string? Q { get; set; }
+    [SupplyParameterFromQuery(Name = "od")] private string? Od { get; set; }
+    [SupplyParameterFromQuery(Name = "do")] private string? Do { get; set; }
+    [SupplyParameterFromQuery(Name = "waznosc")] private string? Waznosc { get; set; }
+    [SupplyParameterFromQuery(Name = "kategoria")] private string? Kategoria { get; set; }
+    [SupplyParameterFromQuery(Name = "zrodlo")] private int? Zrodlo { get; set; }
+
+    private sealed record SourceOption(int Id, string Name);
+
+    private IReadOnlyList<SearchHit>? hits;
+    private List<SourceOption> sources = [];
+
+    private bool HasFilters => !string.IsNullOrEmpty(Od) || !string.IsNullOrEmpty(Do) || !string.IsNullOrEmpty(Waznosc) || !string.IsNullOrEmpty(Kategoria) || Zrodlo is not null;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await using (var db = await DbFactory.CreateDbContextAsync())
+            sources = await db.Sources.AsNoTracking().OrderBy(s => s.Name).Select(s => new SourceOption(s.Id, s.Name)).ToListAsync();
+
+        if (string.IsNullOrWhiteSpace(Q) && !HasFilters) return;
+        hits = await Search.SearchAsync(new SearchFilters(
+            Q,
+            DateOnly.TryParse(Od, out var from) ? from : null,
+            DateOnly.TryParse(Do, out var to) ? to : null,
+            Waznosc is not null && ReportVocabulary.Importances.TryGetValue(Waznosc, out var importance) ? importance : null,
+            Kategoria is not null && ReportVocabulary.Categories.TryGetValue(Kategoria, out var category) ? category : null,
+            Zrodlo,
+            Limit));
+    }
+}

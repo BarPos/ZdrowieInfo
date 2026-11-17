@@ -1,0 +1,55 @@
+@page "/Account/Manage/Notifications"
+
+@using System.Security.Claims
+@using Microsoft.EntityFrameworkCore
+@using ZdrowieInfo.Server.Common
+@using ZdrowieInfo.Server.Data
+
+@inject IDbContextFactory<ZdrowieInfoDbContext> DbFactory
+
+<PageTitle>Powiadomienia – ZdrowieInfo</PageTitle>
+
+<h2>Powiadomienia</h2>
+<p>Powiadomienie przychodzi, gdy raport dzienny jest gotowy (ok. 5:30), gdy źródło przestaje być dostępne i gdy dostęp wraca.</p>
+<p class="muted">Na iPhonie powiadomienia działają od iOS 16.4 i tylko w aplikacji dodanej do ekranu początkowego (Udostępnij → Do ekranu początkowego) – włącz je z poziomu tej aplikacji, nie w Safari.</p>
+
+<section class="card push-panel" data-push-panel>
+    <AntiforgeryToken />
+    <p class="push-status" data-push-status>Sprawdzam, czy to urządzenie obsługuje powiadomienia…</p>
+    <div class="actions">
+        <button type="button" class="btn btn-primary" data-push-action="enable" hidden>Włącz na tym urządzeniu</button>
+        <button type="button" class="btn" data-push-action="test" hidden>Wyślij testowe</button>
+        <button type="button" class="btn" data-push-action="disable" hidden>Wyłącz na tym urządzeniu</button>
+    </div>
+</section>
+
+<h3>Urządzenia z włączonymi powiadomieniami</h3>
+@if (devices.Count == 0)
+{
+    <p class="muted">Żadne urządzenie nie ma włączonych powiadomień.</p>
+}
+else
+{
+    <ul>
+        @foreach (var d in devices)
+        {
+            <li>@(d.Device ?? "urządzenie") <span class="muted">– od @WarsawClock.ToLocal(d.CreatedAt).ToString("dd.MM.yyyy")@(d.LastSuccessAt is { } ok ? $", ostatnio dostarczone {WarsawClock.ToLocal(ok):dd.MM HH:mm}" : "")</span></li>
+        }
+    </ul>
+}
+
+@code {
+    private sealed record DeviceRow(string? Device, DateTimeOffset CreatedAt, DateTimeOffset? LastSuccessAt);
+
+    [CascadingParameter] private HttpContext HttpContext { get; set; } = default!;
+
+    private List<DeviceRow> devices = [];
+
+    protected override async Task OnInitializedAsync()
+    {
+        var userId = HttpContext.User.FindFirstValue(ClaimTypes.NameIdentifier);
+        await using var db = await DbFactory.CreateDbContextAsync();
+        devices = await db.PushSubscriptions.AsNoTracking().Where(s => s.UserId == userId)
+            .OrderBy(s => s.CreatedAt).Select(s => new DeviceRow(s.Device, s.CreatedAt, s.LastSuccessAt)).ToListAsync();
+    }
+}

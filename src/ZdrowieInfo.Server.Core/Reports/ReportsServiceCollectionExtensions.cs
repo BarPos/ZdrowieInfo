@@ -19,6 +19,7 @@ public static class ReportsServiceCollectionExtensions
                 : sp.GetRequiredService<ClaudeReportGenerator>());
         services.AddSingleton<DailyReportService>();
         services.AddSingleton<ReportScheduler>();
+        services.AddSingleton<Search.ReportSearch>();
         return services;
     }
 }

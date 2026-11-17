@@ -64,6 +64,9 @@ kbd { background: var(--surface); border: 1px solid var(--border); border-radius
 .check { display: flex; gap: .5rem; align-items: center; margin-bottom: 1rem; }
 .error, .validation-message { color: var(--danger); font-size: .9rem; }
 
+/* Atrybut hidden ma wygrywać z display ustawionym w klasach (przyciski powiadomień przełączane w pwa.js). */
+[hidden] { display: none !important; }
+
 .btn {
     display: inline-block; font: inherit; font-weight: 600; text-align: center; text-decoration: none; cursor: pointer;
     padding: .6rem 1rem; border-radius: 8px; border: 1px solid var(--border); background: var(--surface); color: var(--text);
@@ -195,3 +198,30 @@ body:has(.doc) { background: var(--desk); }
     .doc a { color: #000; }
     .doc-finding { break-inside: avoid; }
 }
+
+/* Dziennik incydentów i filtry */
+.filters { display: flex; flex-wrap: wrap; gap: .75rem; align-items: flex-end; margin: 1rem 0; }
+.filters label { display: flex; flex-direction: column; gap: .25rem; font-size: .85rem; color: var(--muted); }
+.filters input, .filters select { font: inherit; padding: .45rem .6rem; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); color: var(--text); }
+.table-wrap { overflow-x: auto; }
+table.incidents { font-size: .92rem; background: var(--surface); }
+table.incidents th { text-align: left; padding: .5rem; border-bottom: 2px solid var(--border); white-space: nowrap; }
+table.incidents td { vertical-align: top; }
+table.incidents tr.open td:first-child { border-left: 3px solid var(--danger); }
+table.incidents .details { max-width: 28rem; color: var(--muted); }
+.push-panel .actions { margin-top: .5rem; }
+
+/* Wyszukiwanie */
+.search-box { display: flex; gap: .5rem; }
+.search-box input { flex: 1; min-width: 0; font: inherit; padding: .6rem .8rem; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); color: var(--text); }
+.home-search { margin-bottom: 1rem; }
+.search-filters { margin: .75rem 0 0; }
+.search-filters summary { cursor: pointer; color: var(--muted); }
+.search-group { margin: 1.5rem 0; }
+.search-group h2 { font-size: 1.05rem; margin-bottom: .5rem; }
+.search-hit { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: .8rem 1rem; margin-bottom: .6rem; }
+.search-hit h3 { font-size: 1rem; margin: .2rem 0 .3rem; }
+.search-meta { margin: 0; display: flex; gap: .5rem; align-items: center; font-size: .85rem; }
+.search-snippet { margin: .2rem 0; }
+.search-snippet mark { background: #ffe58a; color: #1d2220; padding: 0 .1em; border-radius: 2px; }
+.search-sources { margin: .3rem 0 0; font-size: .85rem; color: var(--muted); display: flex; flex-wrap: wrap; gap: .25rem .75rem; }

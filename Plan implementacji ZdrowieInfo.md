@@ -233,6 +233,8 @@ Gotowe, gdy: codziennie przed 6:30 jest raport (pusty albo z punktami), cytaty p
 
 ### Etap 4 — Powiadomienia push i dziennik incydentów (M)
 
+**Kod gotowy 17.11.2026** — [docs/decyzje.md](docs/decyzje.md) (D22): endpointy pod `/push` zamiast `/api/push`, `IPushSender` zamiast `INotificationChannel`. Do sprawdzenia ręcznie: push na iPhonie (wymaga wdrożenia z HTTPS).
+
 1. Migracja: `push_subscriptions`.
 2. `VapidKeyManager` przy starcie: porównanie `PublicUrl` z zapisanym adresem, generowanie kluczy, usuwanie starych subskrypcji, log (plan, „Zmiana domeny”).
 3. `GET /api/push/vapid-public-key`, `POST /api/push/subscribe`, `DELETE /api/push/subscribe` (cookie + antyforgery); przycisk „Włącz powiadomienia” i „Wyślij testowe” w ustawieniach.
@@ -262,6 +264,8 @@ Gotowe, gdy: każdy raport ma PDF z polskimi znakami i klikalnymi źródłami.
 
 ### Etap 6 — Wyszukiwanie (S–M)
 
+**Kod gotowy 17.11.2026** — [docs/decyzje.md](docs/decyzje.md) (D23): `pl_unaccent` + dopasowanie fragmentu słowa zamiast słownika; fragment z podświetleniem w C# zamiast `ts_headline`; bez `pg_trgm` i stronicowania (do 100 wyników, filtry).
+
 1. Decyzja o słowniku (otwarta kwestia w planie). Propozycja na start: własna konfiguracja `pl_unaccent` = `unaccent` + `simple` jako mapowanie tekstowe (`CREATE TEXT SEARCH CONFIGURATION ... ALTER MAPPING ... WITH unaccent, simple`). Uwaga techniczna: funkcja `unaccent()` nie jest `IMMUTABLE`, więc nie da się jej wprost użyć w kolumnie generowanej — konfiguracja tekstowa omija ten problem. Ispell dla polskiego można dodać później jako zamiana konfiguracji i przebudowa kolumn.
 2. Migracja: generowane `search_vector` w `reports` i `report_findings` (wagi: nagłówek A, treść B), indeksy GIN; `pg_trgm` na tytułach dla literówek.
 3. `/szukaj?q=&od=&do=&waznosc=&kategoria=&zrodlo=` jako zwykły formularz GET, wyniki z `ts_headline`, stronicowanie.
@@ -271,6 +275,8 @@ Testy: odmiana i brak polskich znaków („przerwa”/„przerwy”, „zrodlo�
 Gotowe, gdy: znajdujesz dawny raport po słowie z treści punktu.
 
 ### Etap 7 — Serwer MCP (S)
+
+**Kod gotowy 17.11.2026** — [docs/decyzje.md](docs/decyzje.md) (D24); podłączenie w README.
 
 1. `ModelContextProtocol.AspNetCore` (weryfikacja wersji z etapu 0), transport HTTP pod `/mcp`, w tym samym procesie.
 2. Uwierzytelnianie istniejącym schematem kluczy, polityka `mcp:read`, rate limiting.

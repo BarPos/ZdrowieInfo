@@ -5,6 +5,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using ZdrowieInfo.Server.Common;
 using ZdrowieInfo.Server.Data;
+using ZdrowieInfo.Server.Push;
 using ZdrowieInfo.Server.Sources.Extraction;
 using ZdrowieInfo.Server.Sources.Fetching;
 
@@ -22,6 +23,7 @@ public sealed class SourceCheckService(
     TimeProvider time,
     WarsawClock clock,
     IOptions<SourcesOptions> options,
+    NotificationDispatcher notifications,
     ILogger<SourceCheckService> logger)
 {
     private readonly SemaphoreSlim _runLock = new(1, 1);
@@ -84,6 +86,8 @@ public sealed class SourceCheckService(
 
             logger.LogInformation("Uruchomienie {RunId} ({Kind}): {Checked} źródeł, {Failed} z błędem, {New} nowych wpisów.",
                 run.Id, kind, run.SourcesChecked, run.SourcesFailed, run.NewItems);
+            // Otwarte i zamknięte incydenty – powiadomienie od razu (flagi w bazie chronią przed duplikatami).
+            await notifications.DispatchPendingAsync(CancellationToken.None);
             return new CheckRunResult(run.Id, run.SourcesChecked, run.SourcesFailed, run.NewItems);
         }
         finally

@@ -6,14 +6,14 @@ Aplikacja codziennie sprawdza publiczne strony NFZ, CeZ, MZ i CSIRT CeZ, wykrywa
 - Kolejność prac i stan etapów: [Plan implementacji ZdrowieInfo.md](Plan%20implementacji%20ZdrowieInfo.md)
 - Decyzje techniczne: [docs/decyzje.md](docs/decyzje.md)
 
-**Stan:** etapy 1–3: logowanie z TOTP i passkey, PWA, instalator; 23 źródła z wykrywaniem zmian, incydentami i harmonogramem 5:00; raport dzienny z Claude od 5:30 (walidacja cytatów, ponowienia do 6:20, raport awaryjny), API dla zewnętrznych producentów raportów. Następne: powiadomienia push (etap 4).
+**Stan:** etapy 1–7 (kod): logowanie z TOTP i passkey, PWA, instalator; 23 źródła z wykrywaniem zmian, incydentami i harmonogramem 5:00; raport dzienny z Claude od 5:30 (walidacja cytatów, ponowienia do 6:20, raport awaryjny), API dla zewnętrznych producentów raportów; powiadomienia push i dziennik incydentów; PDF z LaTeX-a; wyszukiwanie; serwer MCP. Do sprawdzenia na żywo: Claude API (od 18.11.2026) i push na iPhonie.
 
 ## Układ repozytorium
 
 | Ścieżka | |
 | --- | --- |
 | `src/ZdrowieInfo.Server` | cienki host: `Program.cs`, polecenia CLI, migracje EF Core, service worker, manifest i ikony PWA |
-| `src/ZdrowieInfo.Server.Core` | logika w obszarach (`Common`, `Data`, `Accounts`, `Settings`), każdy z `AddXxx()` |
+| `src/ZdrowieInfo.Server.Core` | logika w obszarach (`Common`, `Data`, `Accounts`, `Sources`, `Reports`, `Export`, `Push`, `Search`, `Mcp`, …), każdy z `AddXxx()` |
 | `src/ZdrowieInfo.Web` | Razor class library: strony czytelnika i kont (static SSR), panel (InteractiveServer + MudBlazor) |
 | `tests/ZdrowieInfo.Server.Tests` | xUnit v3; testy integracyjne na PostgreSQL w Testcontainers |
 | `deploy/linux` | jednostka systemd, `install.sh`, kopie zapasowe |
@@ -112,9 +112,25 @@ Każdy raport ma też wersję PDF (XeLaTeX z szablonu; przycisk „Pobierz PDF�
 
 Format raportu (`title`, `summary`, `findings[]` z `importance`, `category`, `headline`, `body`, `action`, `citations[]` z `item_id` i `quote`, `ignored[]`) — [docs/decyzje.md](docs/decyzje.md), D16–D19.
 
+## Powiadomienia i wyszukiwanie
+
+Powiadomienia włącza się osobno na każdym urządzeniu: **Konto → Powiadomienia** (tam też powiadomienie testowe). Przychodzą, gdy raport jest gotowy, gdy źródło przestaje być dostępne i gdy dostęp wraca; historia w **Incydenty**.
+
+**Szukaj** przeszukuje punkty i podsumowania raportów: wielkość liter i polskie znaki bez znaczenia, fragment słowa łapie odmiany („przerw” → przerwa, przerwy), `"fraza"`, `or`, `-słowo`; filtry dat, ważności, kategorii i źródła.
+
+## Serwer MCP (agenci AI)
+
+Agent AI (np. Claude Code) może przeszukiwać raporty przez MCP: utwórz klucz z zakresem `mcp:read` (**Panel → Klucze API**) i dodaj serwer:
+
+```bash
+claude mcp add --transport http zdrowieinfo https://zdrowieinfo.example.pl/mcp --header "Authorization: Bearer mon_…"
+```
+
+Narzędzia (tylko odczyt): `search_reports` (jak strona Szukaj), `get_report` (cały raport dnia z cytatami i adresami źródeł; bez daty najnowszy), `list_sources` (źródła i ich stan). Limit 60 zapytań na minutę na klucz.
+
 ## Zmiana domeny
 
-Ciasteczka, zainstalowana PWA, subskrypcje push i passkey są związane z domeną. Po zmianie `ZdrowieInfo__PublicUrl`: zainstaluj aplikację z nowego adresu, zaloguj się, dodaj passkey i (od etapu 4) włącz powiadomienia ponownie.
+Ciasteczka, zainstalowana PWA, subskrypcje push i passkey są związane z domeną. Po zmianie `ZdrowieInfo__PublicUrl`: zainstaluj aplikację z nowego adresu, zaloguj się, dodaj passkey i włącz powiadomienia ponownie (stare subskrypcje aplikacja usuwa przy starcie).
 
 ## iPhone
 

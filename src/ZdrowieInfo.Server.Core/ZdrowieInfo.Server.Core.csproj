@@ -15,7 +15,9 @@
     <PackageReference Include="DiffPlex" />
     <PackageReference Include="Anthropic" />
     <PackageReference Include="Scriban" />
+    <PackageReference Include="WebPush" />
     <PackageReference Include="Microsoft.Extensions.Http.Resilience" />
+    <PackageReference Include="ModelContextProtocol.AspNetCore" />
   </ItemGroup>
   <ItemGroup>
     <EmbeddedResource Include="Sources/DefaultSources.json" LogicalName="ZdrowieInfo.Server.Sources.DefaultSources.json" />

@@ -1,3 +1,5 @@
+using NpgsqlTypes;
+
 namespace ZdrowieInfo.Server.Reports;
 
 public enum ReportStatus
@@ -65,6 +67,9 @@ public sealed class Report
     public DateTimeOffset CreatedAt { get; set; }
     public DateTimeOffset UpdatedAt { get; set; }
 
+    /// <summary>Kolumna generowana (tytuł A, podsumowanie B) – wyszukiwanie pełnotekstowe.</summary>
+    public NpgsqlTsVector? SearchVector { get; set; }
+
     public List<ReportFinding> Findings { get; set; } = [];
 }
 
@@ -80,6 +85,9 @@ public sealed class ReportFinding
     public required string Body { get; set; }
     public string? Action { get; set; }
     public List<FindingCitation> Citations { get; set; } = [];
+
+    /// <summary>Kolumna generowana (nagłówek A, treść i działanie B).</summary>
+    public NpgsqlTsVector? SearchVector { get; set; }
 }
 
 /// <summary>Kopia źródła dla punktu raportu (tabela <c>finding_citations</c>) – zostaje, gdy treść wpisu zostanie usunięta.</summary>

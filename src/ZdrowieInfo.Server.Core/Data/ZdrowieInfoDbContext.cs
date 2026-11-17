@@ -3,6 +3,7 @@ using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.ChangeTracking;
 using ZdrowieInfo.Server.ApiKeys;
+using ZdrowieInfo.Server.Push;
 using ZdrowieInfo.Server.Reports;
 using ZdrowieInfo.Server.Sources;
 
@@ -12,6 +13,12 @@ public sealed class ZdrowieInfoDbContext(DbContextOptions<ZdrowieInfoDbContext> 
     : IdentityDbContext<AppUser>(options)
 {
     public DbSet<AppSetting> AppSettings => Set<AppSetting>();
+    /// <summary>
+    /// Konfiguracja wyszukiwania: <c>simple</c> + <c>unaccent</c> (bez polskich znaków, bez odmiany). Tworzona w migracji
+    /// Search; słownik ispell dla polskiego można podmienić później jedną migracją.
+    /// </summary>
+    public const string SearchConfig = "pl_unaccent";
+
     public DbSet<Source> Sources => Set<Source>();
     public DbSet<SourceSnapshot> SourceSnapshots => Set<SourceSnapshot>();
     public DbSet<SourceItem> SourceItems => Set<SourceItem>();
@@ -21,6 +28,7 @@ public sealed class ZdrowieInfoDbContext(DbContextOptions<ZdrowieInfoDbContext> 
     public DbSet<ReportFinding> ReportFindings => Set<ReportFinding>();
     public DbSet<FindingCitation> FindingCitations => Set<FindingCitation>();
     public DbSet<ApiKey> ApiKeys => Set<ApiKey>();
+    public DbSet<PushSubscriptionRecord> PushSubscriptions => Set<PushSubscriptionRecord>();
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
@@ -110,6 +118,9 @@ public sealed class ZdrowieInfoDbContext(DbContextOptions<ZdrowieInfoDbContext> 
             e.Property(x => x.SourcesState).HasColumnType("jsonb").HasConversion(Json<List<SourceStateEntry>>(), JsonComparer<List<SourceStateEntry>>());
             e.Property(x => x.AiUsage).HasColumnType("jsonb").HasConversion(Json<AiUsage?>(), JsonComparer<AiUsage?>());
             e.HasMany(x => x.Findings).WithOne().HasForeignKey(x => x.ReportId).OnDelete(DeleteBehavior.Cascade);
+            e.Property(x => x.SearchVector).HasColumnType("tsvector").HasComputedColumnSql(
+                $"setweight(to_tsvector('{SearchConfig}'::regconfig, coalesce(title, '')), 'A') || setweight(to_tsvector('{SearchConfig}'::regconfig, coalesce(summary, '')), 'B')", stored: true);
+            e.HasIndex(x => x.SearchVector).HasMethod("GIN");
         });
 
         builder.Entity<ReportFinding>(e =>
@@ -119,6 +130,9 @@ public sealed class ZdrowieInfoDbContext(DbContextOptions<ZdrowieInfoDbContext> 
             e.Property(x => x.Category).HasConversion<string>().HasMaxLength(20);
             e.Property(x => x.Headline).HasMaxLength(1000);
             e.HasMany(x => x.Citations).WithOne().HasForeignKey(x => x.FindingId).OnDelete(DeleteBehavior.Cascade);
+            e.Property(x => x.SearchVector).HasColumnType("tsvector").HasComputedColumnSql(
+                $"setweight(to_tsvector('{SearchConfig}'::regconfig, coalesce(headline, '')), 'A') || setweight(to_tsvector('{SearchConfig}'::regconfig, coalesce(body, '') || ' ' || coalesce(action, '')), 'B')", stored: true);
+            e.HasIndex(x => x.SearchVector).HasMethod("GIN");
         });
 
         builder.Entity<FindingCitation>(e =>
@@ -137,7 +151,22 @@ public sealed class ZdrowieInfoDbContext(DbContextOptions<ZdrowieInfoDbContext> 
             e.Property(x => x.Prefix).HasMaxLength(32);
             e.Property(x => x.SecretHash).HasMaxLength(128);
         });
+
+        ConfigurePush(builder);
     }
+
+    private static void ConfigurePush(ModelBuilder builder) =>
+        builder.Entity<PushSubscriptionRecord>(e =>
+        {
+            e.ToTable("push_subscriptions");
+            e.HasIndex(x => x.Endpoint).IsUnique();
+            e.Property(x => x.Endpoint).HasMaxLength(2000);
+            e.Property(x => x.P256dh).HasMaxLength(200);
+            e.Property(x => x.Auth).HasMaxLength(100);
+            e.Property(x => x.Device).HasMaxLength(200);
+            e.Property(x => x.Origin).HasMaxLength(300);
+            e.HasOne<AppUser>().WithMany().HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Cascade);
+        });
 
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
     {

@@ -8,7 +8,9 @@ using ZdrowieInfo.Server.Common;
 using ZdrowieInfo.Server.Data;
 using ZdrowieInfo.Server.Export;
 using ZdrowieInfo.Server.Hosting;
+using ZdrowieInfo.Server.Mcp;
 using ZdrowieInfo.Server.Pwa;
+using ZdrowieInfo.Server.Push;
 using ZdrowieInfo.Server.Reports;
 using ZdrowieInfo.Server.Sources;
 using ZdrowieInfo.Web;
@@ -45,6 +47,8 @@ builder.Services.AddSources(builder.Configuration);
 builder.Services.AddReports(builder.Configuration);
 builder.Services.AddApiKeys();
 builder.Services.AddReportExport(builder.Configuration);
+builder.Services.AddPush();
+builder.Services.AddZdrowieInfoMcp();
 builder.Services.AddZdrowieInfoWeb();
 builder.Services.AddHealthChecks();
 
@@ -68,13 +72,19 @@ if (command.Kind != CliCommandKind.Run)
 
 await DatabaseMigrator.MigrateAsync(app.Services);
 await app.Services.GetRequiredService<SourceSeeder>().SeedAsync();
+await app.Services.GetRequiredService<VapidKeyManager>().EnsureAsync();
 
 app.UseForwardedHeaders();
 app.UseSecurityHeaders();
 app.UseRequestLocalization();
 if (!app.Environment.IsDevelopment())
     app.UseExceptionHandler("/Error", createScopeForErrors: true);
-app.UseStatusCodePagesWithReExecute("/not-found", createScopeForStatusCodePages: true);
+// Strona błędu tylko dla przeglądarki. API, MCP i push (fetch) dostają gołe 401/403/404 – ponowne wykonanie POST
+// na stronie Blazor skończyłoby się 400 z walidacji antiforgery.
+app.UseWhen(
+    context => !context.Request.Path.StartsWithSegments("/api") && !context.Request.Path.StartsWithSegments("/mcp")
+               && !context.Request.Path.StartsWithSegments("/push"),
+    branch => branch.UseStatusCodePagesWithReExecute("/not-found", createScopeForStatusCodePages: true));
 
 app.UseAuthentication();
 app.UseAuthorization();
@@ -88,6 +98,8 @@ app.MapHealthChecks("/healthz").AllowAnonymous();
 app.MapZdrowieInfoWeb();
 app.MapReportsApi();
 app.MapReportFiles();
+app.MapPushEndpoints();
+app.MapZdrowieInfoMcp();
 
 app.Logger.LogInformation("ZdrowieInfo {Version} pod adresem {PublicUrl}", AppVersion.Current, app.Services.GetRequiredService<IOptions<ZdrowieInfoOptions>>().Value.PublicUrl);
 await app.RunAsync();

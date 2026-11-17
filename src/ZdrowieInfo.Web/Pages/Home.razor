@@ -7,6 +7,10 @@
 <PageTitle>Raporty – ZdrowieInfo</PageTitle>
 
 <h1>Raporty</h1>
+<form method="get" action="szukaj" class="search-box home-search">
+    <input type="search" name="q" placeholder="Szukaj w raportach…" aria-label="Szukaj w raportach" />
+    <button type="submit" class="btn">Szukaj</button>
+</form>
 @if (rows.Count == 0)
 {
     <section class="card">

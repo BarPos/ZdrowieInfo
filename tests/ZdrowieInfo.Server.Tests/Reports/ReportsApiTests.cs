@@ -42,6 +42,10 @@ public class ReportsApiTests(PostgresFixture postgres)
         anonymous.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", "mon_abcdefgh_" + new string('x', 43));
         Assert.Equal(HttpStatusCode.Unauthorized, (await anonymous.GetAsync("/api/items/pending")).StatusCode);
 
+        // POST bez klucza: 401, nie strona błędu (ponowne wykonanie POST na stronie Blazor dawało 400).
+        Assert.Equal(HttpStatusCode.Unauthorized, (await app.CreateClient(new() { BaseAddress = new Uri("https://localhost") })
+            .PostAsync("/api/reports?date=2026-11-18", Json(new { }))).StatusCode);
+
         var mcpOnly = await ClientAsync(app, ApiScopes.McpRead);
         Assert.Equal(HttpStatusCode.Forbidden, (await mcpOnly.GetAsync("/api/items/pending")).StatusCode);
 

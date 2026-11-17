@@ -246,4 +246,33 @@ Strona `/raporty/rrrr-mm-dd` wygląda jak dokument, a nie strona internetowa: ka
 - Pola jednoliniowe (tytuł, nagłówki, nazwy, metadane PDF) przez `latex_line` — nowa linia jako spacja; `\par` w argumencie `\textbf` przerywałby kompilację.
 - Znaki, których nie ma w czcionce (np. emoji, niektóre strzałki), są pomijane w PDF bez błędu (ostrzeżenie w logu LaTeX-a).
 - Strona raportu w trybie ciemnym ma ciemną „kartkę” (zgodnie z ustawieniem systemu); PDF zawsze jasny.
-- **Do etapu 4:** `GenerateAsync` kończy się po eksporcie PDF (kilka sekund) — powiadomienie push trzeba wysłać po zapisaniu raportu, a przed eksportem, żeby nie czekało na LaTeX.
+- Powiadomienie push o raporcie idzie po zapisaniu raportu, przed eksportem PDF (nie czeka na LaTeX) — D22.
+
+# Decyzje — etap 4 (push i incydenty)
+
+## D22. Powiadomienia push
+
+- WebPush (VAPID). Klucze w `app_settings` (`push.vapid`, zaszyfrowane Data Protection) razem z adresem `PublicUrl`, dla którego powstały. Inny `PublicUrl` przy starcie → nowe klucze i usunięcie wszystkich subskrypcji (stare i tak nie działają w nowej domenie; log ostrzeżenia). Nadawca (`subject`): `mailto:` z `ZdrowieInfo:Sources:ContactEmail`, inaczej adres https aplikacji.
+- Endpointy pod `/push` (nie `/api/push` jak w planie — `/api/*` wymaga klucza API): `GET /push/vapid-public-key`, `POST /push/subscriptions`, `POST /push/subscriptions/delete`, `POST /push/test`. Zalogowany użytkownik (ciasteczko) i antiforgery w nagłówku `RequestVerificationToken`. Konto → Powiadomienia: włącz/wyłącz na tym urządzeniu, testowe, lista urządzeń.
+- `NotificationDispatcher` wysyła zaległe powiadomienia z bazy (flagi `push_sent` w raporcie, `failure_push_sent`/`recovery_push_sent` w incydencie), więc restart niczego nie dubluje ani nie gubi. Wywoływany po zapisaniu raportu (przed PDF), po każdym sprawdzeniu źródeł i co minutę w harmonogramie. Zdarzenia starsze niż doba są tylko oznaczane (bez zalewu powiadomień po dłuższej przerwie). Incydent zamknięty, zanim poszło powiadomienie o nim → tylko powiadomienie o przywróceniu (z czasem trwania).
+- Treść: raport — tytuł, liczba krytycznych i wysokich (albo punktów), podsumowanie; „Bez analizy – …” przy raporcie awaryjnym (np. brak kredytów API), „brak zmian” przy pustym. Kliknięcie otwiera raport albo `/incydenty`.
+- 404/410 z serwera push → subskrypcja usunięta. Wysyłka przez interfejs `IPushSender` (w testach fałszywy); osobny `INotificationChannel` z planu nie jest potrzebny, dopóki nie ma drugiego kanału (ntfy).
+- `/incydenty` — static SSR, filtry GET `zrodlo`, `od`, `do`.
+
+# Decyzje — etap 6 (wyszukiwanie)
+
+## D23. Wyszukiwanie
+
+- Konfiguracja tekstowa `pl_unaccent` (kopia `simple` + `unaccent`), kolumny generowane `search_vector` w `reports` (tytuł A, podsumowanie B) i `report_findings` (nagłówek A, treść i działanie B), indeksy GIN. Bez polskiego słownika (ispell) — `simple` nie odmienia słów.
+- Dlatego dwa przebiegi: pełnotekstowy (`websearch_to_tsquery`: cudzysłowy, `or`, `-słowo`; ranking `ts_rank`) i dopasowanie fragmentu słowa bez polskich znaków (`unaccent(...) ILIKE '%przerw%'`, każde słowo zapytania musi wystąpić) dopisane za trafieniami pełnotekstowymi. „przerw” znajduje „przerwa” i „przerwy”, „zrodlo” znajduje „źródło”. Przy obecnej skali (setki raportów) ILIKE bez indeksu wystarcza; przy dużym wzroście — `pg_trgm`.
+- Fragment z podświetleniem (`<mark>`) liczony w C#, nie `ts_headline` (który nie podświetla fragmentów słów); tekst kodowany jako HTML przed wstawieniem znaczników. Trafienia w samym raporcie (tytuł/podsumowanie, np. „Brak zmian”) tylko bez filtrów ważności/kategorii/źródła.
+- `/szukaj` — formularz GET (bez JavaScriptu), filtry: daty, ważność, kategoria, źródło (przez cytaty punktu). Do 100 wyników grupowanych po dniu, bez stronicowania (zawężanie filtrami). Wspólna usługa `ReportSearch` dla strony i MCP.
+
+# Decyzje — etap 7 (MCP)
+
+## D24. Serwer MCP
+
+- `ModelContextProtocol.AspNetCore` 2.4.0, Streamable HTTP pod `/mcp`, tryb bezstanowy (domyślny od wersji protokołu 2026-07-28; starsi klienci z `initialize` też działają). Ten sam proces co aplikacja.
+- Klucz API z zakresem `mcp:read` (`Authorization: Bearer mon_…`), limit 60 zapytań/min na klucz jak w `/api`. Bez zakresu 403, bez klucza 401.
+- Narzędzia tylko do odczytu (adnotacja `readOnlyHint`): `search_reports(query, from, to, importance, category, source, limit)` — to samo wyszukiwanie co `/szukaj`, ważność i kategorie po polsku jak w raporcie, źródło po identyfikatorze z `list_sources`; `get_report(date)` — cały raport (bez daty najnowszy) z numerami punktów, cytatami i adresami źródeł, linkiem do raportu i PDF; `list_sources()` — źródła, stan i otwarty incydent. Wyniki jako JSON (snake_case). Złe parametry → błąd narzędzia z listą dozwolonych wartości.
+- Strona błędu (`UseStatusCodePagesWithReExecute`) wyłączona dla `/api`, `/mcp` i `/push`: ponowne wykonanie POST bez klucza na stronie Blazor kończyło się 400 (antiforgery) zamiast 401.

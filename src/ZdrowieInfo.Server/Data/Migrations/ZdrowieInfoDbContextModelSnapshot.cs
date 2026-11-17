@@ -6,6 +6,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
+using NpgsqlTypes;
 using ZdrowieInfo.Server.Data;
 
 #nullable disable
@@ -378,6 +379,70 @@ namespace ZdrowieInfo.Server.Data.Migrations
                     b.ToTable("AspNetUsers", (string)null);
                 });
 
+            modelBuilder.Entity("ZdrowieInfo.Server.Push.PushSubscriptionRecord", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<string>("Auth")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("auth");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("Device")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("device");
+
+                    b.Property<string>("Endpoint")
+                        .IsRequired()
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)")
+                        .HasColumnName("endpoint");
+
+                    b.Property<DateTimeOffset?>("LastSuccessAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("last_success_at");
+
+                    b.Property<string>("Origin")
+                        .IsRequired()
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)")
+                        .HasColumnName("origin");
+
+                    b.Property<string>("P256dh")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("p256dh");
+
+                    b.Property<string>("UserId")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("user_id");
+
+                    b.HasKey("Id")
+                        .HasName("pk_push_subscriptions");
+
+                    b.HasIndex("Endpoint")
+                        .IsUnique()
+                        .HasDatabaseName("ix_push_subscriptions_endpoint");
+
+                    b.HasIndex("UserId")
+                        .HasDatabaseName("ix_push_subscriptions_user_id");
+
+                    b.ToTable("push_subscriptions", (string)null);
+                });
+
             modelBuilder.Entity("ZdrowieInfo.Server.Reports.FindingCitation", b =>
                 {
                     b.Property<long>("Id")
@@ -493,6 +558,12 @@ namespace ZdrowieInfo.Server.Data.Migrations
                         .HasColumnType("boolean")
                         .HasColumnName("push_sent");
 
+                    b.Property<NpgsqlTsVector>("SearchVector")
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("tsvector")
+                        .HasColumnName("search_vector")
+                        .HasComputedColumnSql("setweight(to_tsvector('pl_unaccent'::regconfig, coalesce(title, '')), 'A') || setweight(to_tsvector('pl_unaccent'::regconfig, coalesce(summary, '')), 'B')", true);
+
                     b.Property<string>("SourcesState")
                         .IsRequired()
                         .HasColumnType("jsonb")
@@ -534,6 +605,11 @@ namespace ZdrowieInfo.Server.Data.Migrations
                     b.HasIndex("Date")
                         .IsUnique()
                         .HasDatabaseName("ix_reports_date");
+
+                    b.HasIndex("SearchVector")
+                        .HasDatabaseName("ix_reports_search_vector");
+
+                    NpgsqlIndexBuilderExtensions.HasMethod(b.HasIndex("SearchVector"), "GIN");
 
                     b.ToTable("reports", (string)null);
                 });
@@ -582,11 +658,22 @@ namespace ZdrowieInfo.Server.Data.Migrations
                         .HasColumnType("bigint")
                         .HasColumnName("report_id");
 
+                    b.Property<NpgsqlTsVector>("SearchVector")
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("tsvector")
+                        .HasColumnName("search_vector")
+                        .HasComputedColumnSql("setweight(to_tsvector('pl_unaccent'::regconfig, coalesce(headline, '')), 'A') || setweight(to_tsvector('pl_unaccent'::regconfig, coalesce(body, '') || ' ' || coalesce(action, '')), 'B')", true);
+
                     b.HasKey("Id")
                         .HasName("pk_report_findings");
 
                     b.HasIndex("ReportId")
                         .HasDatabaseName("ix_report_findings_report_id");
+
+                    b.HasIndex("SearchVector")
+                        .HasDatabaseName("ix_report_findings_search_vector");
+
+                    NpgsqlIndexBuilderExtensions.HasMethod(b.HasIndex("SearchVector"), "GIN");
 
                     b.ToTable("report_findings", (string)null);
                 });
@@ -1137,6 +1224,16 @@ namespace ZdrowieInfo.Server.Data.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired()
                         .HasConstraintName("fk_asp_net_user_tokens_asp_net_users_user_id");
+                });
+
+            modelBuilder.Entity("ZdrowieInfo.Server.Push.PushSubscriptionRecord", b =>
+                {
+                    b.HasOne("ZdrowieInfo.Server.Data.AppUser", null)
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_push_subscriptions_asp_net_users_user_id");
                 });
 
             modelBuilder.Entity("ZdrowieInfo.Server.Reports.FindingCitation", b =>

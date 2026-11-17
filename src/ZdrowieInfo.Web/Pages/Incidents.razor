@@ -1,0 +1,91 @@
+@page "/incydenty"
+@using Microsoft.EntityFrameworkCore
+@using ZdrowieInfo.Server.Common
+@using ZdrowieInfo.Server.Data
+@using ZdrowieInfo.Server.Push
+@using ZdrowieInfo.Server.Sources
+@inject IDbContextFactory<ZdrowieInfoDbContext> DbFactory
+@inject TimeProvider Time
+
+<PageTitle>Incydenty – ZdrowieInfo</PageTitle>
+
+<h1>Dziennik incydentów</h1>
+<p class="muted">Problemy z dostępem do źródeł: incydent otwiera się po 3 nieudanych próbach w ok. 15 minut, potem źródło jest sprawdzane co godzinę, aż dostęp wróci. Historia przechowywana bezterminowo.</p>
+
+<form method="get" class="filters" action="incydenty">
+    <label>Źródło
+        <select name="zrodlo">
+            <option value="">wszystkie</option>
+            @foreach (var s in sources)
+            {
+                <option value="@s.Id" selected="@(Zrodlo == s.Id)">@s.Name</option>
+            }
+        </select>
+    </label>
+    <label>Od <input type="date" name="od" value="@Od" /></label>
+    <label>Do <input type="date" name="do" value="@Do" /></label>
+    <button type="submit" class="btn">Filtruj</button>
+</form>
+
+@if (rows.Count == 0)
+{
+    <section class="card"><p>Brak incydentów@(Zrodlo is not null || Od is not null || Do is not null ? " dla wybranych filtrów" : "").</p></section>
+}
+else
+{
+    <div class="table-wrap">
+        <table class="list incidents">
+            <thead><tr><th>Źródło</th><th>Początek</th><th>Koniec</th><th>Czas</th><th>Typ</th><th>Próby</th><th>Szczegóły</th></tr></thead>
+            <tbody>
+                @foreach (var r in rows)
+                {
+                    <tr class="@(r.Incident.EndedAt is null ? "open" : "")">
+                        <td><a href="@r.Url" target="_blank" rel="noopener">@r.Name</a></td>
+                        <td>@Local(r.Incident.StartedAt)</td>
+                        <td>@(r.Incident.EndedAt is null ? "trwa" : Local(r.Incident.EndedAt.Value))</td>
+                        <td>@NotificationDispatcher.Duration((r.Incident.EndedAt ?? now) - r.Incident.StartedAt)</td>
+                        <td>@NotificationDispatcher.Describe(r.Incident.ErrorType)</td>
+                        <td>@r.Incident.Attempts</td>
+                        <td class="details">@r.Incident.Details</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+}
+
+@code {
+    [SupplyParameterFromQuery(Name = "zrodlo")] private int? Zrodlo { get; set; }
+    [SupplyParameterFromQuery(Name = "od")] private string? Od { get; set; }
+    [SupplyParameterFromQuery(Name = "do")] private string? Do { get; set; }
+
+    private sealed record Row(SourceIncident Incident, string Name, string Url);
+    private sealed record SourceOption(int Id, string Name);
+
+    private List<Row> rows = [];
+    private List<SourceOption> sources = [];
+    private DateTimeOffset now;
+
+    protected override async Task OnInitializedAsync()
+    {
+        now = Time.GetUtcNow();
+        await using var db = await DbFactory.CreateDbContextAsync();
+        sources = await db.Sources.AsNoTracking().OrderBy(s => s.Name).Select(s => new SourceOption(s.Id, s.Name)).ToListAsync();
+
+        var query = from i in db.SourceIncidents.AsNoTracking()
+                    join s in db.Sources on i.SourceId equals s.Id
+                    select new { i, s.Name, s.Url };
+        if (Zrodlo is { } id) query = query.Where(x => x.i.SourceId == id);
+        if (DateOnly.TryParse(Od, out var from)) { var f = Utc(from); query = query.Where(x => (x.i.EndedAt ?? now) >= f); }
+        if (DateOnly.TryParse(Do, out var to)) { var t = Utc(to.AddDays(1)); query = query.Where(x => x.i.StartedAt < t); }
+        rows = (await query.OrderByDescending(x => x.i.StartedAt).Take(500).ToListAsync()).Select(x => new Row(x.i, x.Name, x.Url)).ToList();
+    }
+
+    private static DateTimeOffset Utc(DateOnly date)
+    {
+        var local = date.ToDateTime(TimeOnly.MinValue);
+        return new DateTimeOffset(local, WarsawClock.Zone.GetUtcOffset(local)).ToUniversalTime();
+    }
+
+    private static string Local(DateTimeOffset t) => WarsawClock.ToLocal(t).ToString("dd.MM.yyyy HH:mm");
+}

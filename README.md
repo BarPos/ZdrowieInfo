@@ -181,7 +181,7 @@ Każdy raport ma też wersję PDF (XeLaTeX z szablonu; dla administratora przyci
 
 Administrator może udostępnić PDF raportu publicznym linkiem (`/udostepnione/<losowy token>`, bez logowania): na dole strony raportu **Udostępnij…** – tam też nowy losowy link (stary przestaje działać), wycofanie i usunięcie raportu.
 
-**Panel → Raporty**: raport dzienny za wcześniejszy dzień albo raport okresowy od–do (do 92 dni), z wpisów opublikowanych w tych dniach. Gdy znane wpisy źródła nie sięgają tak daleko, aplikacja przegląda starsze strony list i pobiera treść wpisów (może to potrwać kilka minut; zlecenia działają w tle). Raporty wstecz nie wysyłają powiadomień.
+**Panel → Raporty**: raport dzienny za wcześniejszy dzień albo raport okresowy od–do (do 92 dni), z wpisów opublikowanych w tych dniach. Gdy znane wpisy źródła nie sięgają tak daleko, aplikacja przegląda starsze strony list i pobiera treść wpisów (może to potrwać kilka minut; zlecenia działają w tle). Raporty wstecz nie wysyłają powiadomień. *Odśwież PDF* przy raporcie składa sam PDF od nowa z zapisanej treści (np. po aktualizacji, która zmienia wygląd PDF) – bez wywołania Claude.
 
 Format raportu (`title`, `summary`, `findings[]` z `importance`, `category`, `headline`, `body`, `action`, `citations[]` z `item_id` i `quote`, `ignored[]`) — [docs/decyzje.md](docs/decyzje.md), D16–D19.
 

@@ -3,7 +3,7 @@ namespace ZdrowieInfo.Server.Common;
 /// <summary>Wersja aplikacji. Musi być równa &lt;Version&gt; w Directory.Build.props (sprawdza to test).</summary>
 public static class AppVersion
 {
-    public const string Current = "0.1.2";
+    public const string Current = "0.1.3";
 
     /// <summary>Zwykłe x.y.z (to samo co update.sh: zi_is_plain_version) – bez „v”, sufiksów i spacji.</summary>
     public static bool IsPlainTriplet(string? version)

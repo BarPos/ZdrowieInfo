@@ -349,4 +349,5 @@ Domyślnie wszystkie 23 źródła sprawdzane codziennie o 5:00 (lista domyślna 
 
 - PDF ma te same linki co strona: przypisy cytatów (jak dotąd), a także pominięte wpisy, źródła z uwagami i wpisy źródłowe (`\href`). Test porównuje cele linków strony i dokumentu LaTeX dla raportu ze wszystkimi sekcjami.
 - Każdy punkt pokazuje ważność (kolor: krytyczna, wysoka) nad kategorią – na stronie i w PDF; bez nagłówków grup „Krytyczne/Wysokie…”. Kolejność bez zmian: od najważniejszych.
+- Panel → Raporty: „Odśwież PDF” przy każdym raporcie składa sam PDF od nowa z zapisanej treści (np. starsze raporty po zmianie szablonu) – bez wywołania Claude; treść, numery punktów i publiczny link bez zmian. To samo z wiersza poleceń: `--export-report rrrr-mm-dd`.
 

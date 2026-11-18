@@ -5,10 +5,12 @@
 @using Microsoft.EntityFrameworkCore
 @using ZdrowieInfo.Server.Common
 @using ZdrowieInfo.Server.Data
+@using ZdrowieInfo.Server.Export
 @using ZdrowieInfo.Server.Reports
 @inject IDbContextFactory<ZdrowieInfoDbContext> DbFactory
 @inject ReportJobQueue Jobs
 @inject DailyReportService ReportService
+@inject ReportExporter Exporter
 @inject WarsawClock Clock
 @inject AuthenticationStateProvider AuthState
 @inject ISnackbar Snackbar
@@ -97,6 +99,10 @@
                 <CellTemplate>
                     <MudStack Row="true" Spacing="1">
                         <MudButton Size="Size.Small" OnClick="() => Regenerate(context.Item)">Przygotuj ponownie</MudButton>
+                        <MudButton Size="Size.Small" Disabled="exporting.Contains(context.Item.Key)" OnClick="() => RebuildPdf(context.Item)"
+                                   title="Składa PDF od nowa z zapisanej treści raportu, bez wywołania Claude.">
+                            @(exporting.Contains(context.Item.Key) ? "PDF…" : "Odśwież PDF")
+                        </MudButton>
                         <MudButton Size="Size.Small" Color="Color.Error" OnClick="() => Delete(context.Item)">Usuń</MudButton>
                     </MudStack>
                 </CellTemplate>
@@ -115,6 +121,7 @@
     private MudDataGrid<Row>? grid;
     private DateTime? day, from, to;
     private bool replaceDaily, replacePeriod;
+    private readonly HashSet<ReportKey> exporting = [];
     private string login = "";
 
     private DateTime Today => Clock.Today.ToDateTime(TimeOnly.MinValue);
@@ -186,6 +193,22 @@
                 $"Raport {row.Key.Label} zostanie przygotowany od nowa z tych samych dni (to kolejne wywołanie Claude). Publiczny link zostaje.",
                 yesText: "Przygotuj ponownie", cancelText: "Anuluj") != true) return;
         Jobs.Enqueue(row.Key.Start, row.Key.End, replace: true, login);
+    }
+
+    // Sam PDF z zapisanej treści (np. po aktualizacji szablonu) – bez Claude, treść i publiczny link bez zmian.
+    private async Task RebuildPdf(Row row)
+    {
+        if (!exporting.Add(row.Key)) return;
+        try
+        {
+            var result = await Exporter.ExportAsync(row.Key);
+            if (result.Success) Snackbar.Add($"PDF raportu {row.Key.Label} wygenerowany ponownie.", Severity.Success);
+            else Snackbar.Add($"Nie udało się wygenerować PDF raportu {row.Key.Label}: {result.Error}", Severity.Error);
+        }
+        finally
+        {
+            exporting.Remove(row.Key);
+        }
     }
 
     private async Task Delete(Row row)

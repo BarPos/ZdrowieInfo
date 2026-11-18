@@ -20,8 +20,9 @@ public static class ReportComposer
         Ministerstwa Zdrowia i CSIRT CeZ i pisze krótki raport dla kierownictwa przychodni. Raport czyta jedna osoba
         rano na telefonie, więc ma być konkretny: co się zmieniło, czy dotyczy tej przychodni, co trzeba zrobić i do kiedy.
 
-        Dostajesz profil przychodni i listę wpisów wykrytych od ostatniego raportu. Każdy wpis ma identyfikator (atrybut id),
-        źródło, datę, adres i treść. Typ „aktualizacja” oznacza, że wcześniej znany wpis zmienił tytuł albo datę.
+        Dostajesz profil przychodni i listę wpisów wykrytych od ostatniego raportu (raport przygotowywany jest rano
+        za poprzedni dzień). Każdy wpis ma identyfikator (atrybut id), źródło, datę, adres i treść.
+        Typ „aktualizacja” oznacza, że wcześniej znany wpis zmienił tytuł albo datę.
         Typ „zmiana strony” zawiera tylko zmienione fragmenty strony: linie z „+ ” dodane, z „- ” usunięte.
 
         Zasady:
@@ -40,7 +41,7 @@ public static class ReportComposer
            - średnia: zmiany do zaplanowania z terminem powyżej 30 dni; podatność w oprogramowaniu, gdy lista systemów
              przychodni jest pusta albo nie wiadomo, czy dotyczy;
            - niska: informacja bez działania po stronie przychodni.
-           Terminy licz od daty raportu podanej w wejściu.
+           Terminy (i słowa „dziś”, „jutro”) licz od dnia czytania raportu podanego w wejściu.
         6. Kategoria: awaria (przerwy i prace serwisowe), P1 (e-recepta, e-skierowanie, EDM, IKP, PUI i inne usługi P1),
            CeR (centralna e-rejestracja), sprawozdawczość (komunikaty XML, walidacje, słowniki, raportowanie do NFZ),
            bezpieczeństwo (ostrzeżenia i podatności, KSC), rozliczenia (umowy, finansowanie, rozliczanie świadczeń), inne.
@@ -97,11 +98,14 @@ public static class ReportComposer
         {
             sb.Append("Raport okresowy za okres od ").Append(start.ToString("dd.MM.yyyy", pl)).Append(" do ").Append(date.ToString("dd.MM.yyyy", pl)).Append(".\n");
             sb.Append("Wejście to wszystkie wpisy opublikowane w tym okresie (także te, które były już w raportach dziennych), a nie tylko nowe od ostatniego raportu. ")
-              .Append("„title” ma zawierać okres, „summary” – najważniejsze sprawy całego okresu. Terminy licz od ostatniego dnia okresu.\n\n");
+              .Append("„title” ma zawierać okres, „summary” – najważniejsze sprawy całego okresu.\n");
+            sb.Append("Dzień czytania raportu: ").Append(date.ToString("dd.MM.yyyy (dddd)", pl)).Append(" (ostatni dzień okresu).\n\n");
         }
         else
         {
             sb.Append("Data raportu: ").Append(date.ToString("dd.MM.yyyy (dddd)", pl)).Append("\n");
+            var readOn = request.Retrospective ? date : request.ReadOn ?? date;
+            sb.Append("Dzień czytania raportu: ").Append(readOn.ToString("dd.MM.yyyy (dddd)", pl)).Append("\n");
             if (request.Retrospective)
                 sb.Append("Raport przygotowywany wstecz: wejście to wpisy opublikowane tego dnia (a nie nowe od ostatniego raportu).\n");
             sb.Append('\n');

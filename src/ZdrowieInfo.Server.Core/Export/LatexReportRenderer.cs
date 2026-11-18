@@ -57,29 +57,28 @@ public sealed class LatexReportRenderer(IOptions<ExportOptions> options, TimePro
         model["sources_checked"] = view.SourcesChecked;
         model["sources_total"] = report.SourcesState.Count;
         model["generated"] = WarsawClock.ToLocal(time.GetUtcNow()).ToString("dd.MM.yyyy HH:mm", pl);
-        model["groups"] = view.Groups.Select(g => new ScriptObject
+        // Każdy punkt z własną ważnością nad kategorią (jak na stronie), od najważniejszych.
+        model["findings"] = view.Findings.Select(f => new ScriptObject
         {
-            ["heading"] = g.Heading,
-            ["color"] = g.Importance switch { Importance.Critical => "critical", Importance.High => "high", _ => "muted" },
-            ["findings"] = g.Findings.Select(f => new ScriptObject
+            ["number"] = f.Number,
+            ["importance"] = f.Importance,
+            ["color"] = f.Finding.Importance switch { Importance.Critical => "critical", Importance.High => "high", _ => "muted" },
+            ["headline"] = f.Finding.Headline,
+            ["category"] = f.Category,
+            ["body"] = f.Finding.Body,
+            ["action"] = f.Finding.Action,
+            ["citations"] = f.Citations.Select(c => new ScriptObject
             {
-                ["number"] = f.Number,
-                ["headline"] = f.Finding.Headline,
-                ["category"] = f.Category,
-                ["body"] = f.Finding.Body,
-                ["action"] = f.Finding.Action,
-                ["citations"] = f.Citations.Select(c => new ScriptObject
-                {
-                    ["quote"] = c.Citation.Quote,
-                    ["title"] = c.Citation.Title,
-                    ["url"] = c.Citation.Url,
-                    ["date"] = c.Citation.PublishedOn?.ToString("dd.MM.yyyy"),
-                    ["verified"] = c.Citation.Verified,
-                }).ToList(),
+                ["quote"] = c.Citation.Quote,
+                ["title"] = c.Citation.Title,
+                ["url"] = c.Citation.Url,
+                ["date"] = c.Citation.PublishedOn?.ToString("dd.MM.yyyy"),
+                ["verified"] = c.Citation.Verified,
             }).ToList(),
         }).ToList();
-        model["ignored"] = view.Ignored.Select(i => new ScriptObject { ["title"] = i.Title, ["reason"] = i.Reason }).ToList();
-        model["source_problems"] = view.SourceProblems.Select(s => new ScriptObject { ["name"] = s.Name, ["text"] = s.Problem ?? s.Warning }).ToList();
+        // Te same linki co na stronie: pominięte wpisy, źródła z uwagami i wpisy źródłowe.
+        model["ignored"] = view.Ignored.Select(i => new ScriptObject { ["title"] = i.Title, ["url"] = i.Url ?? "", ["reason"] = i.Reason }).ToList();
+        model["source_problems"] = view.SourceProblems.Select(s => new ScriptObject { ["name"] = s.Name, ["url"] = s.Url, ["text"] = s.Problem ?? s.Warning }).ToList();
         model["recoveries"] = view.Recoveries.ToList();
         model["entries"] = view.Entries.Select(e => new ScriptObject
         {

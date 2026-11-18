@@ -160,10 +160,11 @@ body:has(.doc) { background: var(--desk); }
 .doc h2 { font-family: system-ui, sans-serif; font-size: 1.1rem; color: var(--accent); margin: 0 0 .6rem; }
 .doc-num { font-variant-numeric: tabular-nums; margin-right: .35rem; }
 .doc-lead { font-size: 1.1rem; }
-.doc-group { font-family: system-ui, sans-serif; font-size: .75rem; letter-spacing: .1em; text-transform: uppercase; color: var(--paper-muted); margin: 1.4rem 0 .4rem; }
-.doc-group.importance-critical { color: var(--danger); }
-.doc-group.importance-high { color: #9a6200; }
-@media (prefers-color-scheme: dark) { .doc-group.importance-high { color: #f0c264; } }
+/* Ważność każdego punktu nad jego kategorią. */
+.doc-imp { margin: 0; font-family: system-ui, sans-serif; font-size: .72rem; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--paper-muted); }
+.doc-imp.importance-critical { color: var(--danger); }
+.doc-imp.importance-high { color: #9a6200; }
+@media (prefers-color-scheme: dark) { .doc-imp.importance-high { color: #f0c264; } }
 .doc-finding { margin: 0 0 1.4rem; }
 .doc-finding h4 { font-size: 1.06rem; margin: 0 0 .3rem; }
 .doc-finding .doc-cat { margin: 0 0 .1rem; font-family: system-ui, sans-serif; font-size: .72rem; letter-spacing: .06em; text-transform: uppercase; color: var(--paper-muted); }

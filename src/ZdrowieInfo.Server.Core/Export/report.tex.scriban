@@ -13,6 +13,7 @@
 \usepackage{titlesec}
 \usepackage{fancyhdr}
 \usepackage[hang,flushmargin]{footmisc}
+\usepackage{needspace}
 \usepackage{hyperref}
 
 \definecolor{accent}{HTML}{0F5C4D}
@@ -64,12 +65,13 @@ Wpisy źródłowe: & {{ entries_count }} \\
 \section{Podsumowanie}
 {{ summary | latex }}
 
-{{ if groups.size > 0 }}
+{{ if findings.size > 0 }}
 \section{Ustalenia}
-{{ for g in groups }}
-\subsection*{\sffamily\small\color{ {{- g.color -}} }\MakeUppercase{ {{ g.heading | latex_line }} }}
-{{ for f in g.findings }}
-\textbf{ {{- f.number }}.~{{ f.headline | latex_line -}} }\hfill{\small\color{muted} {{ f.category | latex_line }} }\par
+{{ for f in findings }}
+\needspace{4\baselineskip}
+{\sffamily\scriptsize\bfseries\color{ {{- f.color -}} }\MakeUppercase{ {{ f.importance | latex_line }} }}\par\nointerlineskip
+{\sffamily\scriptsize\color{muted}\MakeUppercase{ {{ f.category | latex_line }} }}\par
+\textbf{ {{- f.number }}.~{{ f.headline | latex_line -}} }\par
 {{ f.body | latex }}
 {{ if f.action }}
 \notebox{actionbg}{\small\textbf{Do zrobienia:} {{ f.action | latex -}} }
@@ -77,8 +79,7 @@ Wpisy źródłowe: & {{ entries_count }} \\
 {{ for c in f.citations }}
 \begin{quote}\itshape „{{ c.quote | latex }}”\footnote{ {{- c.title | latex_line }}{{ if c.date }}, {{ c.date }}{{ end }}{{ if !c.verified }} (cytat niezweryfikowany){{ end }}.{{ if c.url != "" }} \url{ {{- c.url | latex_url -}} }{{ end }} }\end{quote}
 {{ end }}
-\vspace{0.6em}
-{{ end }}
+\vspace{0.8em}
 {{ end }}
 {{ end }}
 
@@ -96,7 +97,7 @@ Wpisy źródłowe: & {{ entries_count }} \\
 {\small Wpisy uznane za nieistotne dla przychodni – z powodem, żeby można było sprawdzić, czy nic ważnego nie zostało odrzucone.}
 \begin{itemize}[leftmargin=1.2em]
 {{ for i in ignored }}
-\item {{ i.title | latex_line }} {\color{muted}– {{ i.reason | latex }} }
+\item {{ if i.url != "" }}\href{ {{- i.url | latex_url -}} }{ {{- i.title | latex_line -}} }{{ else }}{{ i.title | latex_line }}{{ end }} {\color{muted}– {{ i.reason | latex }} }
 {{ end }}
 \end{itemize}
 {{ end }}
@@ -109,7 +110,7 @@ Wszystkie {{ sources_total }} źródeł bez problemów (sprawdzone w tym dniu: {
 Bez problemów: {{ sources_total - source_problems.size }} z {{ sources_total }}. Uwagi:
 \begin{itemize}[leftmargin=1.2em]
 {{ for s in source_problems }}
-\item \textbf{ {{ s.name | latex_line }} }: {{ s.text | latex }}
+\item \href{ {{- s.url | latex_url -}} }{\textbf{ {{- s.name | latex_line -}} }}: {{ s.text | latex }}
 {{ end }}
 \end{itemize}
 {{ end }}
@@ -122,7 +123,7 @@ Bez problemów: {{ sources_total - source_problems.size }} z {{ sources_total }}
 \section{Wpisy źródłowe}
 \begin{enumerate}[leftmargin=1.6em]\small
 {{ for e in entries }}
-\item {{ e.title | latex_line }} {\color{muted}({{ e.source | latex_line }}{{ if e.date }}, {{ e.date }}{{ end }})}
+\item \href{ {{- e.url | latex_url -}} }{ {{- e.title | latex_line -}} } {\color{muted}({{ e.source | latex_line }}{{ if e.date }}, {{ e.date }}{{ end }})}
 {{ end }}
 \end{enumerate}
 {{ end }}

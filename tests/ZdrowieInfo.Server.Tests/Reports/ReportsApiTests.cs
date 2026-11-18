@@ -142,7 +142,7 @@ public class ReportsApiTests(PostgresFixture postgres)
         Assert.Contains("1 wysokie", list);
 
         var page = await browser.TextAsync("/raporty/2026-11-18");
-        Assert.Contains("Wysokie", page);
+        Assert.Contains("wysoka", page); // ważność nad kategorią punktu
         Assert.Contains("Przerwa w PUI", page);
         Assert.Contains("18 listopada 2026 roku w godzinach 20:00–24:00", page);
         Assert.Contains("Stan źródeł", page);

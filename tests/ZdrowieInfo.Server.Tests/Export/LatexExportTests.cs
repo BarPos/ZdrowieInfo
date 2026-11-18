@@ -135,4 +135,55 @@ public class LatexExportTests(PostgresFixture postgres)
         Assert.Contains("2.1.", text);
         Assert.Contains("Przypisy", text);
     }
+
+    [Fact]
+    public async Task Pdf_has_the_same_links_as_the_page_and_importance_above_category()
+    {
+        await using var app = await AppFactory.CreateAsync(postgres);
+        var cited = await app.AddItemAsync("ezdrowie-podmioty", "Przerwa w PUI", "https://ezdrowie.gov.pl/portal/artykul/pui", "PUI będzie niedostępna.");
+        var skipped = await app.AddItemAsync("mz-komunikaty", "Apteki", "https://www.gov.pl/web/zdrowie/apteki?a=1&b=2", "Dla aptek.");
+        var date = new DateOnly(2026, 11, 18);
+        await using (var db = await app.DbAsync())
+        {
+            db.Reports.Add(new Report
+            {
+                Date = date, Title = "Raport 18.11", Summary = "Podsumowanie.", Producer = "claude", Status = ReportStatus.Ready,
+                CreatedAt = DateTimeOffset.UtcNow, UpdatedAt = DateTimeOffset.UtcNow, InputItemIds = [cited.Id, skipped.Id],
+                Body = new ReportDocument { Ignored = [new IgnoredDto { ItemId = skipped.Id.ToString(), Reason = "dotyczy aptek" }] },
+                SourcesState = [new SourceStateEntry(1, "NFZ – Komunikaty", "https://www.nfz.gov.pl/komunikaty/", true, false, "HTTP 503", null, null, true, [])],
+                Findings =
+                [
+                    new ReportFinding
+                    {
+                        Importance = Importance.Critical, Category = FindingCategory.Outage, Headline = "PUI niedostępna", Body = "Przerwa.",
+                        Citations = [new FindingCitation { SourceItemId = cited.Id, Title = cited.Title, Url = cited.Url, Quote = "PUI będzie niedostępna.", Verified = true }],
+                    },
+                    new ReportFinding { Importance = Importance.Low, Category = FindingCategory.Other, Headline = "Drobiazg", Body = "Informacja.", Order = 1 },
+                ],
+            });
+            await db.SaveChangesAsync();
+        }
+
+        // Strona: wszystkie linki zewnętrzne dokumentu (przypisy, pominięte wpisy, źródła z uwagami, wpisy źródłowe).
+        var browser = await app.SignedInBrowserAsync();
+        var page = new AngleSharp.Html.Parser.HtmlParser().ParseDocument(await (await browser.GetAsync("/raporty/2026-11-18")).Content.ReadAsStringAsync());
+        var pageLinks = page.QuerySelectorAll("article.doc a[href^='http']").Select(a => a.GetAttribute("href")!).Order().ToList();
+
+        // PDF: cele \url i \href z dokumentu LaTeX (to samo, co trafia do adnotacji PDF).
+        string tex;
+        await using (var db = await app.DbAsync())
+            tex = app.Services.GetRequiredService<LatexReportRenderer>().Render((await ReportView.LoadAsync(db, date))!);
+        var texLinks = System.Text.RegularExpressions.Regex.Matches(tex, @"\\(?:url|href)\{([^}]*)\}")
+            .Select(m => m.Groups[1].Value.Replace(@"\%", "%").Replace(@"\#", "#")).Order().ToList();
+
+        Assert.Equal(5, pageLinks.Count); // przypis, pominięty wpis, źródło z uwagą, 2 wpisy źródłowe
+        Assert.Equal(pageLinks, texLinks);
+
+        // Ważność nad kategorią przy każdym punkcie (bez nagłówków grup).
+        var labels = page.QuerySelectorAll(".doc-finding").Select(f => (f.QuerySelector(".doc-imp")?.TextContent, f.QuerySelector(".doc-cat")?.TextContent)).ToList();
+        Assert.Equal([("krytyczna", "awaria"), ("niska", "inne")], labels);
+        Assert.Empty(page.QuerySelectorAll(".doc-group"));
+        Assert.True(tex.IndexOf(@"\MakeUppercase{ krytyczna }", StringComparison.Ordinal) < tex.IndexOf(@"\MakeUppercase{ awaria }", StringComparison.Ordinal));
+        Assert.True(tex.IndexOf(@"\MakeUppercase{ niska }", StringComparison.Ordinal) > 0);
+    }
 }

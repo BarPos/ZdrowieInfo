@@ -25,7 +25,14 @@ public sealed record ReportView(
 {
     public sealed record FindingGroup(Importance Importance, string Heading, IReadOnlyList<FindingEntry> Findings);
 
-    public sealed record FindingEntry(string Number, ReportFinding Finding, string Category, IReadOnlyList<CitationEntry> Citations);
+    public sealed record FindingEntry(string Number, ReportFinding Finding, string Category, IReadOnlyList<CitationEntry> Citations)
+    {
+        /// <summary>Ważność punktu („krytyczna”, „wysoka”…) – pokazywana nad kategorią.</summary>
+        public string Importance => ReportVocabulary.Label(Finding.Importance);
+    }
+
+    /// <summary>Punkty po kolei (od najważniejszych), każdy z własną ważnością – bez nagłówków grup.</summary>
+    public IReadOnlyList<FindingEntry> Findings => Groups.SelectMany(g => g.Findings).ToList();
 
     public sealed record CitationEntry(int Footnote, FindingCitation Citation);
 

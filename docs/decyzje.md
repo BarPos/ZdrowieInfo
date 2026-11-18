@@ -336,3 +336,17 @@ Domyślnie wszystkie 23 źródła sprawdzane codziennie o 5:00 (lista domyślna 
 - **Kopie:** `backup.sh create` (baza, `config/`, `data/` bez `updates`, `tmp` i cache TeX-a, działająca wersja programu), codziennie o 3:30 z `--keep 14`; `restore` sprawdza archiwum przed zmianami, robi kopię bieżącego stanu i zostawia ustawienia bazy tego serwera.
 - **Testy:** `update.sh --self-test` i `tests/update-functions-test.sh` (złośliwe paczki); `tests/container-smoke.sh` w kontenerze ubuntu:24.04 z atrapą `systemctl`, która uruchamia prawdziwy serwer: instalacja, `/healthz`, wycofanie z przywróceniem bazy (z `unaccent`), odmowy, prawdziwa aktualizacja do nowszej wersji, `--upgrade`, kopia i przywrócenie, hasło i 2FA, naprawa, odinstalowanie, stary układ. `tests/container-sharedpg-smoke.sh`: istniejący PostgreSQL z bazą innej aplikacji, drugim klastrem oraz cudzą rolą i bazą `zdrowieinfo` – instalacja dodaje `zdrowieinfo_2`, a pakiety, klastry, `postgresql.conf`/`pg_hba.conf`, dane i hasła innej aplikacji zostają bez zmian przez instalację, kopię, przywrócenie, odinstalowanie i nieudaną instalację. Nie da się tam sprawdzić jednostek systemd (path, timer, ograniczenia `[Service]`) ani workflow GitHub.
 
+# Decyzje — raport za poprzedni dzień, linki w PDF, ważność punktu (18.11.2026)
+
+## D33. Raport rano za poprzedni dzień
+
+- Harmonogram (od 5:30) przygotowuje raport za **poprzedni dzień** – minął cały, więc nic z tego dnia nie dojdzie później. Wpisy czekające na raport wchodzą do niego, jeśli opublikowano je najpóźniej tego dnia; wpisy z dzisiejszą datą czekają na jutrzejszy raport (za dziś). Zmiany stron (data = dzień wykrycia) i wpisy bez daty wchodzą zawsze. Zastępuje D16 w części „jeden raport na dzień – za dziś”.
+- Raport za ten dzień przygotowany jeszcze w jego trakcie (ręcznie „za dziś” albo przed tą zmianą – np. raport 18.11 z rana 18.11) harmonogram następnego ranka **zastępuje** pełnym (te same wpisy plus doszłe w ciągu dnia; publiczny link zostaje). Nieudane zastąpienie zostawia stary raport i nie jest ponawiane w kółko.
+- Powiadomienie push: raport z harmonogramu (za wczoraj) – tak; raporty starsze i ponownie przygotowane za dawniejsze dni – nie. Usunięcie raportu za wczoraj – harmonogram go nie odtwarza.
+- Prompt dostaje „Dzień czytania raportu” (dzień przygotowania), a terminy i „dziś/jutro” są liczone od niego, nie od daty raportu.
+
+## D34. Linki w PDF i ważność każdego punktu
+
+- PDF ma te same linki co strona: przypisy cytatów (jak dotąd), a także pominięte wpisy, źródła z uwagami i wpisy źródłowe (`\href`). Test porównuje cele linków strony i dokumentu LaTeX dla raportu ze wszystkimi sekcjami.
+- Każdy punkt pokazuje ważność (kolor: krytyczna, wysoka) nad kategorią – na stronie i w PDF; bez nagłówków grup „Krytyczne/Wysokie…”. Kolejność bez zmian: od najważniejszych.
+

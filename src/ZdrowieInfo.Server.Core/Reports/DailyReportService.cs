@@ -52,6 +52,9 @@ public sealed class DailyReportService(
 
     private DateOnly Today => DateOnly.FromDateTime(WarsawClock.ToLocal(time.GetUtcNow()));
 
+    /// <summary>Dzień raportu z harmonogramu (przygotowywanego rano za poprzedni dzień).</summary>
+    private DateOnly Yesterday => Today.AddDays(-1);
+
     /// <summary>
     /// Dokument .tex i PDF po zapisaniu raportu. Błąd eksportu nie wpływa na raport ani powiadomienie – trafia do logu
     /// i pola PdfError, a PDF można wygenerować ponownie przy pobraniu.
@@ -102,11 +105,15 @@ public sealed class DailyReportService(
 
             // Przy zastępowaniu wejście obejmuje też wpisy z obecnego raportu; stary raport znika dopiero razem z zapisem nowego.
             // Raport z przeszłości zastępowany jest tylko ze swoich wpisów – nowe wpisy czekają na najbliższy raport dzienny.
+            // Wpisy opublikowane po dniu raportu (np. dziś rano, gdy raport jest za wczoraj) czekają na raport za swój dzień;
+            // zmiany stron i wpisy bez daty – zawsze.
             var now = time.GetUtcNow();
-            var withPending = replaceId is null || date >= Today;
+            var withPending = replaceId is null || date >= Yesterday;
             var pending = await (from i in db.SourceItems.AsNoTracking()
                                  join s in db.Sources on i.SourceId equals s.Id
-                                 where ((withPending && i.ReportedAt == null) || (replaceId != null && i.ReportId == replaceId)) && !i.IsBaseline
+                                 where ((withPending && i.ReportedAt == null
+                                            && (i.Kind == Sources.SourceItemKind.PageChange || i.PublishedOn == null || i.PublishedOn <= date))
+                                        || (replaceId != null && i.ReportId == replaceId)) && !i.IsBaseline
                                  select new PendingItem(i, s.Name)).ToListAsync(ct);
             var previous = await db.Reports.AsNoTracking().Daily().Where(r => r.Date < date).OrderByDescending(r => r.Date).Select(r => (DateTimeOffset?)r.CreatedAt).FirstOrDefaultAsync(ct);
             var sourcesState = await SourcesStateBuilder.BuildAsync(db, previous ?? now.AddDays(-1), ct);
@@ -122,7 +129,7 @@ public sealed class DailyReportService(
                     Summary = "W monitorowanych źródłach nie pojawiły się nowe wpisy.",
                     Producer = "system",
                     SourcesState = sourcesState,
-                    PushSent = date < Today, // ponowne przygotowanie raportu z przeszłości to nie nowość dnia
+                    PushSent = date < Yesterday, // ponowne przygotowanie raportu z przeszłości to nie nowość dnia
                     CreatedAt = now,
                     UpdatedAt = now,
                 };
@@ -139,7 +146,7 @@ public sealed class DailyReportService(
             Report report;
             try
             {
-                report = await AnalyzeAsync(new GenerationRequest(date, profile, inputs), ct);
+                report = await AnalyzeAsync(new GenerationRequest(date, profile, inputs, ReadOn: Today), ct);
             }
             catch (ReportGenerationException e) when (e.Transient && !finalAttempt)
             {
@@ -169,7 +176,7 @@ public sealed class DailyReportService(
             report.Date = date;
             report.GenerationAttempts = attemptNo;
             report.SourcesState = sourcesState;
-            report.PushSent = date < Today; // ponowne przygotowanie raportu z przeszłości to nie nowość dnia
+            report.PushSent = date < Yesterday; // ponowne przygotowanie raportu z przeszłości to nie nowość dnia
             report.CreatedAt = now;
             report.UpdatedAt = now;
             report.InputItemIds = inputs.SelectMany(i => i.SourceItemIds).Distinct().Order().ToList();
@@ -185,7 +192,8 @@ public sealed class DailyReportService(
 
     /// <summary>
     /// Raport na żądanie administratora (panel, wiersz poleceń): dzienny za dowolny dzień do dziś albo okresowy od–do.
-    /// Dziś i ponowne przygotowanie raportu z harmonogramu – jak <see cref="GenerateAsync"/> (wpisy, które raport „zabrał”).
+    /// Wczoraj, dziś i ponowne przygotowanie raportu z harmonogramu – jak <see cref="GenerateAsync"/> (wpisy czekające na raport
+    /// i te, które raport „zabrał”).
     /// Pozostałe – raport wstecz z wpisów opublikowanych w tych dniach; brakujące wpisy i ich treść pobierane są ze stron.
     /// Bez powiadomień push (to nie jest nowy raport dnia).
     /// </summary>
@@ -200,7 +208,8 @@ public sealed class DailyReportService(
         var key = from == to ? ReportKey.Daily(to) : ReportKey.Period(from, to);
         if (key.Kind == ReportKind.Daily)
         {
-            if (to == today) return await GenerateAsync(to, replace, finalAttempt: true, ct);
+            // Wczoraj i dziś – jak harmonogram: wpisy czekające na raport (dziś: raport w trakcie dnia, jutro rano zastąpiony pełnym).
+            if (to >= today.AddDays(-1)) return await GenerateAsync(to, replace, finalAttempt: true, ct);
             await using var db = await dbFactory.CreateDbContextAsync(ct);
             var existing = await db.Reports.AsNoTracking().WhereKey(key).Select(r => (long?)r.Id).SingleOrDefaultAsync(ct);
             if (existing is { } id && replace && await db.SourceItems.AnyAsync(i => i.ReportId == id, ct))
@@ -331,7 +340,8 @@ public sealed class DailyReportService(
             await db.Reports.Where(r => r.Id == report.Id).ExecuteDeleteAsync(ct); // source_items.report_id → null, reported_at zostaje
             foreach (var path in new[] { report.PdfPath, report.TexPath })
                 if (path is not null && File.Exists(path)) File.Delete(path);
-            if (key.Kind == ReportKind.Daily && key.End == Today) await settings.SetSkipDateAsync(key.End, ct);
+            // Raport, który harmonogram przygotowałby teraz (za wczoraj), nie jest odtwarzany po usunięciu.
+            if (key.Kind == ReportKind.Daily && key.End == Yesterday) await settings.SetSkipDateAsync(key.End, ct);
             logger.LogInformation("Raport {Key} usunięty.", key);
             return true;
         }

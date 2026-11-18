@@ -6,7 +6,7 @@ Aplikacja codziennie sprawdza publiczne strony NFZ, CeZ, MZ i CSIRT CeZ, wykrywa
 - Kolejność prac i stan etapów: [Plan implementacji ZdrowieInfo.md](Plan%20implementacji%20ZdrowieInfo.md)
 - Decyzje techniczne: [docs/decyzje.md](docs/decyzje.md)
 
-**Stan:** etapy 1–7 (kod): logowanie z TOTP i passkey, PWA, instalator; 23 źródła z wykrywaniem zmian, incydentami i harmonogramem 5:00; raport dzienny z Claude od 5:30 (walidacja cytatów, ponowienia do 6:20, raport awaryjny), API dla zewnętrznych producentów raportów; powiadomienia push i dziennik incydentów; PDF z LaTeX-a; wyszukiwanie; serwer MCP; role administrator/użytkownik, raporty wstecz i okresowe, publiczne linki do PDF; instalator, wydania na GitHubie i aktualizacja z panelu. Do sprawdzenia na żywo: Claude API (od 18.11.2026) i push na iPhonie.
+**Stan:** etapy 1–7 (kod): logowanie z TOTP i passkey, PWA, instalator; 23 źródła z wykrywaniem zmian, incydentami i harmonogramem 5:00; raport z Claude rano od 5:30 za poprzedni dzień (walidacja cytatów, ponowienia do 6:20, raport awaryjny), API dla zewnętrznych producentów raportów; powiadomienia push i dziennik incydentów; PDF z LaTeX-a; wyszukiwanie; serwer MCP; role administrator/użytkownik, raporty wstecz i okresowe, publiczne linki do PDF; instalator, wydania na GitHubie i aktualizacja z panelu. Do sprawdzenia na żywo: Claude API (od 18.11.2026) i push na iPhonie.
 
 ## Układ repozytorium
 
@@ -147,7 +147,7 @@ sudo bash -c 'source /opt/zdrowieinfo/bin/update.sh && zi_run_as_service_user /o
 | `--reset-mfa <login>` | awaryjnie: wyłącza TOTP, usuwa passkey, odblokowuje konto; zalogowane urządzenia wylogowane w ciągu 5 minut |
 | `--check-sources [slug]` | próba selektorów na żywych stronach, bez zapisu |
 | `--check-now [slug]` | sprawdza źródła teraz i zapisuje wynik (jak harmonogram) |
-| `--generate-report [rrrr-mm-dd] [--replace]`, `--generate-report rrrr-mm-dd--rrrr-mm-dd` | raport dnia teraz (domyślnie dziś), raport wstecz albo okresowy od–do (brakujące wpisy pobiera ze stron) |
+| `--generate-report [rrrr-mm-dd] [--replace]`, `--generate-report rrrr-mm-dd--rrrr-mm-dd` | raport dnia teraz (domyślnie dziś – w trakcie dnia, następnego ranka harmonogram zastąpi go pełnym), raport wstecz albo okresowy od–do (brakujące wpisy pobiera ze stron) |
 | `--export-report [rrrr-mm-dd albo rrrr-mm-dd--rrrr-mm-dd]` | generuje PDF raportu (domyślnie dziś) |
 | `--mark-reported-before rrrr-mm-dd` | przy włączaniu raportów: starsze wpisy nie trafią do pierwszego raportu |
 | `--apply-default-sources [slug]` | przywraca adresy i selektory z listy domyślnej (np. po aktualizacji aplikacji); zmienione źródła dostają nowy stan bazowy |

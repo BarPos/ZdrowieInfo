@@ -63,12 +63,10 @@ else
         {
             <section>
                 <h2><span class="doc-num">@(++section).</span> Ustalenia</h2>
-                @foreach (var g in view.Groups)
-                {
-                    <h3 class="doc-group importance-@g.Importance.ToString().ToLowerInvariant()">@g.Heading</h3>
-                    @foreach (var f in g.Findings)
+                    @foreach (var f in view.Findings)
                     {
                         <div class="doc-finding">
+                            <p class="doc-imp importance-@f.Finding.Importance.ToString().ToLowerInvariant()">@f.Importance</p>
                             <p class="doc-cat">@f.Category</p>
                             <h4><span class="doc-num">@f.Number.</span> @f.Finding.Headline</h4>
                             <p>@f.Finding.Body</p>
@@ -84,7 +82,6 @@ else
                             }
                         </div>
                     }
-                }
             </section>
         }
 

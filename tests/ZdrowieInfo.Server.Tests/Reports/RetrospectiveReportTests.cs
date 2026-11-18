@@ -154,13 +154,13 @@ public class RetrospectiveReportTests(PostgresFixture postgres)
     }
 
     [Fact]
-    public async Task Deleted_report_keeps_entries_reported_and_today_is_not_recreated_by_scheduler()
+    public async Task Deleted_report_keeps_entries_reported_and_is_not_recreated_by_scheduler()
     {
-        // 18.11.2026 6:10 – po raporcie z harmonogramu.
-        var time = new FakeTimeProvider(new DateTimeOffset(2026, 11, 18, 5, 10, 0, TimeSpan.Zero));
+        // 19.11.2026 6:10 – po raporcie z harmonogramu za 18.11.
+        var time = new FakeTimeProvider(new DateTimeOffset(2026, 11, 19, 5, 10, 0, TimeSpan.Zero));
         await using var app = await AppFactory.CreateAsync(postgres, time: time);
         var item = await app.AddItemAsync("ezdrowie-podmioty", "Przerwa w PUI", "https://ezdrowie.gov.pl/portal/artykul/pui", "Platforma Usług Inteligentnych (PUI) będzie niedostępna w nocy.");
-        var today = new DateOnly(2026, 11, 18);
+        var today = new DateOnly(2026, 11, 18); // dzień raportu z harmonogramu (wczoraj)
         Assert.Equal(ReportRunOutcome.Created, (await Service(app).GenerateAsync(today)).Outcome);
 
         Assert.True(await Service(app).DeleteAsync(ReportKey.Daily(today)));

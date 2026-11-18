@@ -17,7 +17,7 @@
 #
 # Potrzebuje /opt/zdrowieinfo/config/update.env (root:root 600, zapisuje install.sh), linie klucz=wartość:
 #   PGHOST PGPORT PGDATABASE PGUSER PGPASSWORD PGSSLMODE  (pg_dump / pg_restore)
-#   HEALTH_URL (np. http://127.0.0.1:5180/healthz), opcjonalnie PG_BIN (katalog pg_dump zgodnego z serwerem)
+#   HEALTH_URL (zapasowo: zwykle adres /healthz wynika z ASPNETCORE_URLS w zdrowieinfo.env), opcjonalnie PG_BIN (katalog pg_dump zgodnego z serwerem)
 # oraz /opt/zdrowieinfo/config/zdrowieinfo.env (root:root 600) – konfiguracja serwera dla migracji.
 #
 # Użycie: update.sh              wykonuje oczekujące zlecenie (to uruchamia jednostka systemd)
@@ -337,6 +337,29 @@ zi_write_result() {
     zi_log "wynik: $state – $message"
 }
 
+# zi_health_url_from_server_env PLIK: adres /healthz z ASPNETCORE_URLS konfiguracji serwera (pierwszy adres http://).
+# To ten plik decyduje, gdzie serwer nasłuchuje (administrator mógł go zmienić po instalacji), a HEALTH_URL w update.env
+# jest tylko zapisem z instalacji. Nasłuch na wszystkich adresach (0.0.0.0, [::], *, +) i localhost → 127.0.0.1.
+zi_health_url_from_server_env() {
+    local file="$1" line urls="" url host port
+    local -a list=()
+    [[ -f "$file" ]] || return 1
+    while IFS= read -r line || [[ -n "$line" ]]; do
+        line="${line%$'\r'}"
+        [[ "$line" == ASPNETCORE_URLS=* ]] && urls="${line#ASPNETCORE_URLS=}"
+    done <"$file"
+    IFS=';' read -r -a list <<<"$urls"
+    for url in "${list[@]}"; do
+        url="${url//[[:space:]]/}"
+        [[ "$url" =~ ^http://(\[::\]|[A-Za-z0-9.*+-]+):([0-9]{1,5})/?$ ]] || continue
+        host="${BASH_REMATCH[1]}" port="${BASH_REMATCH[2]}"
+        case "$host" in 0.0.0.0 | '[::]' | '*' | + | localhost) host=127.0.0.1 ;; esac
+        echo "http://$host:$port/healthz"
+        return 0
+    done
+    return 1
+}
+
 zi_health_ok() {
     # Działa = /healthz odpowiada i podaje oczekiwaną wersję.
     local expected="$1" body
@@ -487,11 +510,19 @@ zi_main() {
     [[ "$(stat -c %u -- "$env_file")" == 0 ]] || zi_fail "$env_file nie należy do roota"
     HEALTH_URL="" PG_BIN=""
     zi_read_env_file "$env_file"
-    [[ -n "$HEALTH_URL" && -n "${PGDATABASE-}" ]] || zi_fail "$env_file nie ma HEALTH_URL albo PGDATABASE"
+    [[ -n "${PGDATABASE-}" ]] || zi_fail "$env_file nie ma PGDATABASE"
     # Konfiguracja serwera jest potrzebna do migracji – sprawdzana przed zatrzymaniem usługi.
     local server_env="$ZI_ROOT/config/zdrowieinfo.env"
     [[ -f "$server_env" && ! -L "$server_env" && "$(stat -c %u -- "$server_env")" == 0 ]] ||
         zi_fail "brak $server_env albo nie należy do roota (uruchom install.sh --repair)"
+    # /healthz pod adresem, na którym serwer naprawdę nasłuchuje (ASPNETCORE_URLS); HEALTH_URL z update.env – gdy się nie da.
+    local listen_health
+    if listen_health="$(zi_health_url_from_server_env "$server_env")"; then
+        [[ -z "$HEALTH_URL" || "$HEALTH_URL" == "$listen_health" ]] ||
+            zi_log "sprawdzanie $listen_health (z ASPNETCORE_URLS w $server_env; update.env ma $HEALTH_URL)"
+        HEALTH_URL="$listen_health"
+    fi
+    [[ -n "$HEALTH_URL" ]] || zi_fail "nie można ustalić adresu /healthz: brak adresu http:// w ASPNETCORE_URLS i HEALTH_URL w $env_file"
 
     # Wersje: zwykłe x.y.z i tylko nowsza niż działająca.
     PREVIOUS_TARGET="$(readlink -- "$ZI_ROOT/current")" || zi_fail "$ZI_ROOT/current nie jest dowiązaniem"

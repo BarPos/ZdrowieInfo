@@ -304,11 +304,14 @@ do_restore() {
         [[ -z "$v" ]] || new_state+="$k=$v"$'\n'
     done
     printf '%s' "$new_state" | write_root_file "$STATE" root:root 600
-    # Sprawdzanie /healthz na porcie z przywróconej konfiguracji.
-    local port
+    # Sprawdzanie /healthz pod adresem z przywróconej konfiguracji serwera (ASPNETCORE_URLS), inaczej na porcie ze stanu.
+    local port health
     port="$(state_value "$STATE" PORT)"
-    if [[ "$port" =~ ^[0-9]{1,5}$ ]]; then
-        sed "s|^HEALTH_URL=.*|HEALTH_URL=http://127.0.0.1:$port/healthz|" "$UPDATE_ENV" | write_root_file "$UPDATE_ENV" root:root 600
+    if health="$(zi_health_url_from_server_env "$CONFIG")"; then :
+    elif [[ "$port" =~ ^[0-9]{1,5}$ ]]; then health="http://127.0.0.1:$port/healthz"
+    fi
+    if [[ -n "$health" ]]; then
+        sed "s|^HEALTH_URL=.*|HEALTH_URL=$health|" "$UPDATE_ENV" | write_root_file "$UPDATE_ENV" root:root 600
     fi
 
     # Właściciele i prawa jak po install.sh; bez setuid i setgid (dowiązania nie są śledzone).

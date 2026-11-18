@@ -351,3 +351,10 @@ Domyślnie wszystkie 23 źródła sprawdzane codziennie o 5:00 (lista domyślna 
 - Każdy punkt pokazuje ważność (kolor: krytyczna, wysoka) nad kategorią – na stronie i w PDF; bez nagłówków grup „Krytyczne/Wysokie…”. Kolejność bez zmian: od najważniejszych.
 - Panel → Raporty: „Odśwież PDF” przy każdym raporcie składa sam PDF od nowa z zapisanej treści (np. starsze raporty po zmianie szablonu) – bez wywołania Claude; treść, numery punktów i publiczny link bez zmian. To samo z wiersza poleceń: `--export-report rrrr-mm-dd`.
 
+
+## D35. Adres sprawdzania /healthz z ASPNETCORE_URLS
+
+- Problem z produkcji: adres nasłuchu zmieniony ręcznie w `config/zdrowieinfo.env` (`ASPNETCORE_URLS=http://10.10.0.2:5180`), a `update.env` miał `HEALTH_URL` z instalacji (`127.0.0.1`). Nowa wersja działała, ale `update.sh` jej nie widział – po 120 s wycofywał aktualizację (0.1.2 i 0.1.3) i błędnie meldował, że poprzednia wersja też nie odpowiada.
+- `update.sh` (i przywracanie w `backup.sh`) bierze adres `/healthz` z pierwszego adresu `http://` w `ASPNETCORE_URLS` – tego samego pliku, z którego startuje usługa. Nasłuch na wszystkich adresach (`0.0.0.0`, `[::]`, `*`, `+`) i `localhost` → `127.0.0.1`. `HEALTH_URL` z `update.env` zostaje tylko zapasowo; różnica trafia do logu aktualizacji.
+- Na serwerze działa `bin/update.sh` zainstalowany przez `install.sh` (nie z paczki aktualizacji), więc poprawka dociera przez `install.sh --upgrade --version X.Y.Z` albo `--repair --version X.Y.Z`; aktualizacja z panelu jej nie przynosi.
+- Testy: `update-functions-test.sh` (adresy), `container-smoke.sh` – prawdziwa aktualizacja z celowo nieaktualnym `HEALTH_URL`.

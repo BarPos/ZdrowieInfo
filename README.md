@@ -77,6 +77,8 @@ sudo ZDROWIEINFO_ADMIN_PASSWORD='…' bash install.sh --unattended --db=local --
 
 Wszystkie opcje: `bash install.sh --help` (m.in. `--port`, `--listen` i `--trusted-proxy` dla reverse proxy na innej maszynie, `--contact-email`, `--no-pdf`, `--db=existing` z `--db-host`…). Hasła nigdy nie są argumentami: `--secrets-file`, `--secrets-stdin`, zmienne `ZDROWIEINFO_ADMIN_PASSWORD` / `ZDROWIEINFO_DB_PASSWORD` albo pytanie.
 
+Adres nasłuchu można później zmienić w `/opt/zdrowieinfo/config/zdrowieinfo.env` (`ASPNETCORE_URLS`, potem `systemctl restart zdrowieinfo`); aktualizacje sprawdzają `/healthz` pod tym adresem.
+
 Reverse proxy (po Twojej stronie): HTTPS → `http://127.0.0.1:5180`, z nagłówkami `Host`, `X-Forwarded-For`, `X-Forwarded-Proto` i obsługą WebSocket (panel to Blazor Server).
 
 **PostgreSQL używany przez inne aplikacje** (`--db=local`, gdy PostgreSQL już jest): instalator tylko dodaje nową rolę i bazę (`zdrowieinfo`, a gdy ta nazwa jest zajęta – `zdrowieinfo_2`…; istniejąca rola czy baza nigdy nie jest zmieniana ani przejmowana). Rola nie ma uprawnień superużytkownika ani tworzenia baz i ról, a do jej bazy łączy się tylko ona. PostgreSQL nie jest instalowany, aktualizowany, konfigurowany (`postgresql.conf`, `pg_hba.conf`) ani restartowany, a zainstalowane pakiety nie są aktualizowane; klaster starszy niż 16 – odmowa. Przy kilku klastrach wybierz jeden przez `--db-port`. Nieudana instalacja usuwa tylko utworzone przez siebie rolę i bazę; kopia, przywracanie, wycofanie aktualizacji i odinstalowanie działają wyłącznie na bazie ZdrowieInfo.

@@ -194,9 +194,12 @@ check "/etc/shadow nietknięty"         mode_owner /etc/shadow "640 root:shadow"
 
 # 3) Prawdziwa aktualizacja do nowszej wersji (migracje, /healthz z nową wersją, sprzątanie starych wersji).
 for v in 0.0.7 0.0.8; do mkdir -p "$R/releases/$v"; done
+#    HEALTH_URL w update.env nieaktualny (jak po ręcznej zmianie adresu w zdrowieinfo.env) – liczy się ASPNETCORE_URLS.
+sed -i 's|^HEALTH_URL=.*|HEALTH_URL=http://127.0.0.1:9/healthz|' "$R/config/update.env"
 stage "$next" "$pkg_next"
 "$R/bin/update.sh" >/tmp/update4.log 2>&1
 check "aktualizacja: kod 0"            [ $? -eq 0 ]
+check "aktualizacja: adres z ASPNETCORE_URLS" grep -q 'sprawdzanie http://127.0.0.1:[0-9]*/healthz (z ASPNETCORE_URLS' /tmp/update4.log
 # Po udanej aktualizacji result.conf powstaje, gdy nowa wersja już działa – serwer odczyta go w ciągu 5 minut.
 update_succeeded() { [ "$(result state 2>/dev/null)" == Succeeded ] || last_run Succeeded >/dev/null; }
 check "aktualizacja: Succeeded"        update_succeeded

@@ -117,5 +117,19 @@ pruned="$(zi_releases_to_prune "$rel" 3 1.10.0 1.2.0 | tr '\n' ' ')"
 pruned="$(zi_releases_to_prune "$rel" 3 1.10.0 0.9.0 | tr '\n' ' ')"
 [[ "$pruned" == "1.0.0 " ]] && ok "prune never removes protected versions" || bad "prune protected: got '$pruned'"
 
+# ---- /healthz address from the server configuration (ASPNETCORE_URLS), not from the address saved at install
+health_from() { printf '%s\n' "# komentarz" "$@" "ZdrowieInfo__PublicUrl=https://example.pl" >"$TMP/server.env"; zi_health_url_from_server_env "$TMP/server.env"; }
+expect_health() { local d="$1" want="$2"; shift 2; local got; got="$(health_from "$@")"; if [[ "$got" == "$want" ]]; then ok "$d"; else bad "$d (got '$got')"; fi; }
+expect_health "address changed after install"   http://10.10.0.2:5180/healthz  "ASPNETCORE_URLS=http://10.10.0.2:5180"
+expect_health "loopback"                        http://127.0.0.1:5180/healthz  "ASPNETCORE_URLS=http://127.0.0.1:5180"
+expect_health "all addresses -> loopback"       http://127.0.0.1:8080/healthz  "ASPNETCORE_URLS=http://0.0.0.0:8080"
+expect_health "wildcard -> loopback"            http://127.0.0.1:5180/healthz  "ASPNETCORE_URLS=http://*:5180"
+expect_health "IPv6 any -> loopback"            http://127.0.0.1:5180/healthz  "ASPNETCORE_URLS=http://[::]:5180"
+expect_health "first http address of several"  http://10.0.0.5:5180/healthz   "ASPNETCORE_URLS=https://0.0.0.0:5443;http://10.0.0.5:5180"
+expect_health "CRLF line ending"                http://10.10.0.2:5180/healthz  $'ASPNETCORE_URLS=http://10.10.0.2:5180\r'
+expect_false  "no ASPNETCORE_URLS"              health_from "ZdrowieInfo__DataDirectory=/opt/zdrowieinfo/data"
+expect_false  "https only"                      health_from "ASPNETCORE_URLS=https://0.0.0.0:5443"
+expect_false  "missing file"                    zi_health_url_from_server_env "$TMP/none.env"
+
 echo "# $PASS passed, $FAIL failed"
 [[ $FAIL -eq 0 ]]

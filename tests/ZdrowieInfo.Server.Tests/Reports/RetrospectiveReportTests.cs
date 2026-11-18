@@ -151,6 +151,7 @@ public class RetrospectiveReportTests(PostgresFixture postgres)
         var archive = await app.Services.GetRequiredService<SourceCheckService>().EnsureArchiveAsync(new DateOnly(2025, 1, 1));
 
         Assert.Contains(archive.Warnings, w => w.Contains("CSIRT") && w.Contains("2. strony"));
+        Assert.Equal(3, app.Http.CountRequests(Csirt + "?page=1")); // błąd 5xx: pierwsze żądanie i 2 ponowienia
     }
 
     [Fact]

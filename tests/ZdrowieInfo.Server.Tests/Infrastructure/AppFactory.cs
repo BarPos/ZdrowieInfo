@@ -43,6 +43,8 @@ public sealed class AppFactory(string connectionString, string dataDirectory, Fa
         builder.UseSetting("ZdrowieInfo:Sources:SchedulerEnabled", "false");
         builder.UseSetting("ZdrowieInfo:Sources:MinDelayPerHost", "00:00:00");
         builder.UseSetting("ZdrowieInfo:Sources:MaxDelayPerHost", "00:00:00");
+        // Ponowienia bez przerwy: przerwa czekałaby na sztuczny zegar testu (FakeTimeProvider) aż do limitu HttpClient (2 min).
+        builder.UseSetting("ZdrowieInfo:Sources:HttpRetryDelay", "00:00:00");
         builder.UseSetting("ZdrowieInfo:Reports:Generator", "Sample");
         builder.UseSetting("ZdrowieInfo:Export:Enabled", "false"); // kompilacja LaTeX tylko w testach eksportu
 

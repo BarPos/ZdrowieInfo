@@ -9,7 +9,7 @@
 
 <AdminShell>
     <MudText Typo="Typo.h4" Class="mb-4">Uruchomienia</MudText>
-    <MudDataGrid T="CheckRun" ServerData="LoadServerData" Dense="true" Hover="true" RowClick="@(e => Toggle(e.Item))">
+    <MudDataGrid T="CheckRun" ServerData="LoadServerData" Dense="true" Hover="true" SortMode="SortMode.None" Filterable="false" ShowColumnOptions="false" RowClick="@(e => Toggle(e.Item))">
         <Columns>
             <PropertyColumn Property="r => Labels.Time(r.StartedAt)" Title="Start" />
             <PropertyColumn Property="r => Labels.Of(r.Kind)" Title="Rodzaj" />

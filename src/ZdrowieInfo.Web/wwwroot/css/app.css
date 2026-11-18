@@ -48,6 +48,8 @@ kbd { background: var(--surface); border: 1px solid var(--border); border-radius
 .linklike { background: none; border: 0; color: inherit; font: inherit; padding: 0; cursor: pointer; }
 
 .content { max-width: 960px; margin: 0 auto; padding: 1.25rem 1rem 3rem; }
+/* Panel ma szerokie tabele – szerzej niż strony do czytania. */
+.content:has(.admin-shell) { max-width: 1280px; }
 .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 1.25rem; }
 .narrow { max-width: 28rem; }
 .card.narrow { margin: 1rem auto; }

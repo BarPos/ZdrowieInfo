@@ -19,6 +19,9 @@ public sealed class SourcesOptions
     public TimeSpan MaxDelayPerHost { get; set; } = TimeSpan.FromSeconds(3);
 
     public TimeSpan RequestTimeout { get; set; } = TimeSpan.FromSeconds(30);
+
+    /// <summary>Pierwsza przerwa przed ponowieniem nieudanego żądania (5xx, 408, 429, błąd sieci); dalej wykładniczo, 2 ponowienia.</summary>
+    public TimeSpan HttpRetryDelay { get; set; } = TimeSpan.FromSeconds(3);
     public int MaxResponseBytes { get; set; } = 10 * 1024 * 1024;
 
     /// <summary>Ile stron pojedynczych wpisów pobierać na jedno źródło w jednym sprawdzeniu (reszta przy następnym).</summary>

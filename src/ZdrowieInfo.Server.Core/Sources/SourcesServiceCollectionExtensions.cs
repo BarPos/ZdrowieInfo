@@ -42,7 +42,7 @@ public static class SourcesServiceCollectionExtensions
                 pipeline.AddRetry(new HttpRetryStrategyOptions
                 {
                     MaxRetryAttempts = 2,
-                    Delay = TimeSpan.FromSeconds(3),
+                    Delay = o.HttpRetryDelay,
                     BackoffType = DelayBackoffType.Exponential,
                     UseJitter = true,
                 });

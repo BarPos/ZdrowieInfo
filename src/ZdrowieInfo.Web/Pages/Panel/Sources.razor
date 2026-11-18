@@ -20,7 +20,7 @@
     {
         <MudProgressLinear Indeterminate="true" Color="Color.Primary" Class="mb-2" />
     }
-    <MudDataGrid T="Row" Items="rows" Dense="true" Hover="true" SortMode="SortMode.Single" Loading="rows is null">
+    <MudDataGrid T="Row" Items="rows" Dense="true" Hover="true" SortMode="SortMode.Single" Filterable="false" ShowColumnOptions="false" Loading="rows is null">
         <Columns>
             <TemplateColumn Title="Źródło" SortBy="@(r => r.Source.Name)">
                 <CellTemplate>

@@ -20,7 +20,7 @@
         </MudSelect>
         <MudSwitch T="bool" Value="showBaseline" ValueChanged="BaselineChanged" Color="Color.Primary" Label="Pokaż wpisy ze stanu bazowego" />
     </MudStack>
-    <MudDataGrid @ref="grid" T="Row" ServerData="LoadServerData" Dense="true" Hover="true" RowClick="@(e => Show(e.Item))">
+    <MudDataGrid @ref="grid" T="Row" ServerData="LoadServerData" Dense="true" Hover="true" SortMode="SortMode.None" Filterable="false" ShowColumnOptions="false" RowClick="@(e => Show(e.Item))">
         <NoRecordsContent>
             <MudText>Brak wpisów. Nowe pojawią się po kolejnych sprawdzeniach (zastane wpisy to stan bazowy).</MudText>
         </NoRecordsContent>

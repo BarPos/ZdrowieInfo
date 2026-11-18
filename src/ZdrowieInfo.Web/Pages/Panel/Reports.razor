@@ -31,7 +31,7 @@
             <MudPaper Class="pa-4" Elevation="1">
                 <MudText Typo="Typo.h6" Class="mb-2">Raport dzienny</MudText>
                 <MudStack Row="true" Spacing="3" AlignItems="AlignItems.Center" Wrap="Wrap.Wrap">
-                    <MudDatePicker Label="Dzień" @bind-Date="day" MaxDate="Today" DateFormat="dd.MM.yyyy" Style="max-width:180px" />
+                    <div style="width:180px"><MudDatePicker Label="Dzień" @bind-Date="day" MaxDate="Today" DateFormat="dd.MM.yyyy" /></div>
                     <MudCheckBox T="bool" @bind-Value="replaceDaily" Label="Zastąp istniejący" />
                     <MudButton Variant="Variant.Filled" Color="Color.Primary" Disabled="day is null" OnClick="QueueDaily">Przygotuj</MudButton>
                 </MudStack>
@@ -41,8 +41,8 @@
             <MudPaper Class="pa-4" Elevation="1">
                 <MudText Typo="Typo.h6" Class="mb-2">Raport okresowy</MudText>
                 <MudStack Row="true" Spacing="3" AlignItems="AlignItems.Center" Wrap="Wrap.Wrap">
-                    <MudDatePicker Label="Od" @bind-Date="from" MaxDate="Today" DateFormat="dd.MM.yyyy" Style="max-width:160px" />
-                    <MudDatePicker Label="Do" @bind-Date="to" MaxDate="Today" DateFormat="dd.MM.yyyy" Style="max-width:160px" />
+                    <div style="width:160px"><MudDatePicker Label="Od" @bind-Date="from" MaxDate="Today" DateFormat="dd.MM.yyyy" /></div>
+                    <div style="width:160px"><MudDatePicker Label="Do" @bind-Date="to" MaxDate="Today" DateFormat="dd.MM.yyyy" /></div>
                     <MudCheckBox T="bool" @bind-Value="replacePeriod" Label="Zastąp istniejący" />
                     <MudButton Variant="Variant.Filled" Color="Color.Primary" Disabled="from is null || to is null" OnClick="QueuePeriod">Przygotuj</MudButton>
                 </MudStack>
@@ -80,7 +80,7 @@
         </MudSimpleTable>
     }
 
-    <MudDataGrid @ref="grid" T="Row" ServerData="LoadServerData" Dense="true" Hover="true">
+    <MudDataGrid @ref="grid" T="Row" ServerData="LoadServerData" Dense="true" Hover="true" SortMode="SortMode.None" Filterable="false" ShowColumnOptions="false">
         <Columns>
             <TemplateColumn Title="Raport">
                 <CellTemplate>
@@ -97,13 +97,24 @@
             </TemplateColumn>
             <TemplateColumn>
                 <CellTemplate>
-                    <MudStack Row="true" Spacing="1">
-                        <MudButton Size="Size.Small" OnClick="() => Regenerate(context.Item)">Przygotuj ponownie</MudButton>
-                        <MudButton Size="Size.Small" Disabled="exporting.Contains(context.Item.Key)" OnClick="() => RebuildPdf(context.Item)"
-                                   title="Składa PDF od nowa z zapisanej treści raportu, bez wywołania Claude.">
-                            @(exporting.Contains(context.Item.Key) ? "PDF…" : "Odśwież PDF")
-                        </MudButton>
-                        <MudButton Size="Size.Small" Color="Color.Error" OnClick="() => Delete(context.Item)">Usuń</MudButton>
+                    @* Ikony z podpowiedziami – trzy przyciski tekstowe nie mieściły się w wierszu tabeli. *@
+                    <MudStack Row="true" Spacing="0" Justify="Justify.FlexEnd" Style="white-space:nowrap">
+                        <MudTooltip Text="Przygotuj ponownie (nowe wywołanie Claude)">
+                            <MudIconButton Icon="@Icons.Material.Filled.Replay" Size="Size.Small" aria-label="Przygotuj ponownie" OnClick="() => Regenerate(context.Item)" />
+                        </MudTooltip>
+                        <MudTooltip Text="Odśwież PDF (z zapisanej treści, bez Claude)">
+                            @if (exporting.Contains(context.Item.Key))
+                            {
+                                <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mx-2" />
+                            }
+                            else
+                            {
+                                <MudIconButton Icon="@Icons.Material.Filled.PictureAsPdf" Size="Size.Small" aria-label="Odśwież PDF" OnClick="() => RebuildPdf(context.Item)" />
+                            }
+                        </MudTooltip>
+                        <MudTooltip Text="Usuń raport">
+                            <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error" aria-label="Usuń" OnClick="() => Delete(context.Item)" />
+                        </MudTooltip>
                     </MudStack>
                 </CellTemplate>
             </TemplateColumn>

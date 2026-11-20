@@ -63,57 +63,86 @@
         </MudStack>
     </MudPaper>
 
-    <MudSimpleTable Dense="true" Hover="true">
-        <thead><tr><th>Data</th><th>Źródło</th><th>Tytuł</th><th>Stan</th><th>Dodał</th><th></th></tr></thead>
-        <tbody>
-            @if (rows.Count == 0)
+    <MudStack Row="true" Spacing="3" AlignItems="AlignItems.Center" Wrap="Wrap.Wrap" Class="mb-2">
+        <MudTextField T="string" Value="search" ValueChanged="SearchChanged" Label="Szukaj w tytule i źródle" DebounceInterval="300"
+                      Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" Clearable="true" Style="min-width:260px" />
+        <MudSelect T="string" Value="originFilter" ValueChanged="OriginChanged" Label="Źródło" Clearable="true" Style="min-width:200px" Dense="true">
+            @foreach (var o in origins)
             {
-                <tr><td colspan="6">Nie ma jeszcze wpisów własnych.</td></tr>
+                <MudSelectItem T="string" Value="o">@o</MudSelectItem>
             }
-            @foreach (var row in rows)
-            {
-                <tr>
-                    <td>@Labels.Date(row.PublishedOn)</td>
-                    <td>@row.Origin</td>
-                    <td><MudLink Href="@($"wpisy-wlasne/{row.Id}")">@row.Title</MudLink></td>
-                    <td>
-                        @if (row.ReportedAt is null)
+        </MudSelect>
+        <MudSelect T="StateFilter" Value="state" ValueChanged="StateChanged" Label="Stan" Style="min-width:180px" Dense="true">
+            <MudSelectItem T="StateFilter" Value="StateFilter.All">wszystkie</MudSelectItem>
+            <MudSelectItem T="StateFilter" Value="StateFilter.Pending">czeka na raport</MudSelectItem>
+            <MudSelectItem T="StateFilter" Value="StateFilter.Reported">w raporcie</MudSelectItem>
+        </MudSelect>
+    </MudStack>
+
+    <MudDataGrid @ref="grid" T="Row" ServerData="LoadServerData" Dense="true" Hover="true" SortMode="SortMode.None" Filterable="false" ShowColumnOptions="false">
+        <NoRecordsContent><MudText>@(Filtered ? "Brak wpisów spełniających warunki." : "Nie ma jeszcze wpisów własnych.")</MudText></NoRecordsContent>
+        <Columns>
+            <PropertyColumn Property="r => Labels.Date(r.PublishedOn)" Title="Data" />
+            <PropertyColumn Property="r => r.Origin" Title="Źródło" />
+            <TemplateColumn Title="Tytuł">
+                <CellTemplate><MudLink Href="@($"wpisy-wlasne/{context.Item.Id}")">@context.Item.Title</MudLink></CellTemplate>
+            </TemplateColumn>
+            <TemplateColumn Title="Stan">
+                <CellTemplate>
+                    @if (context.Item.ReportedAt is null)
+                    {
+                        <MudChip T="string" Size="Size.Small" Color="Color.Info">czeka na raport</MudChip>
+                    }
+                    else if (context.Item.ReportSlug is { } slug)
+                    {
+                        <MudLink Href="@($"raporty/{slug}")">w raporcie @context.Item.ReportLabel</MudLink>
+                    }
+                    else
+                    {
+                        <span>zaraportowany</span>
+                    }
+                </CellTemplate>
+            </TemplateColumn>
+            <PropertyColumn Property="r => r.CreatedBy" Title="Dodał" />
+            <TemplateColumn>
+                <CellTemplate>
+                    <MudStack Row="true" Spacing="0" Justify="Justify.FlexEnd" Style="white-space:nowrap">
+                        @if (context.Item.ReportedAt is not null)
                         {
-                            <MudChip T="string" Size="Size.Small" Color="Color.Info">czeka na raport</MudChip>
-                        }
-                        else if (row.ReportSlug is { } slug)
-                        {
-                            <MudLink Href="@($"raporty/{slug}")">w raporcie @row.ReportLabel</MudLink>
+                            <MudTooltip Text="Przywróć jako niezaraportowany">
+                                <MudIconButton Icon="@Icons.Material.Filled.Undo" Size="Size.Small" aria-label="Przywróć jako niezaraportowany" OnClick="() => Release(context.Item)" />
+                            </MudTooltip>
                         }
                         else
                         {
-                            <span>zaraportowany</span>
-                        }
-                    </td>
-                    <td>@row.CreatedBy</td>
-                    <td style="white-space:nowrap">
-                        @if (row.ReportedAt is null)
-                        {
                             <MudTooltip Text="Edytuj">
-                                <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small" aria-label="Edytuj" OnClick="() => Edit(row.Id)" />
+                                <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small" aria-label="Edytuj" OnClick="() => Edit(context.Item.Id)" />
                             </MudTooltip>
                             <MudTooltip Text="Usuń">
-                                <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error" aria-label="Usuń" OnClick="() => Delete(row)" />
+                                <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error" aria-label="Usuń" OnClick="() => Delete(context.Item)" />
                             </MudTooltip>
                         }
-                    </td>
-                </tr>
-            }
-        </tbody>
-    </MudSimpleTable>
+                    </MudStack>
+                </CellTemplate>
+            </TemplateColumn>
+        </Columns>
+        <PagerContent>
+            <MudDataGridPager T="Row" PageSizeOptions="[25, 50, 100]" RowsPerPageString="Wierszy na stronę:" />
+        </PagerContent>
+    </MudDataGrid>
 </AdminShell>
 
 @code {
     private sealed record Row(long Id, DateOnly? PublishedOn, string Origin, string Title, DateTimeOffset? ReportedAt, string? CreatedBy, string? ReportSlug, string? ReportLabel);
 
+    private enum StateFilter { All, Pending, Reported }
+
     private ElementReference editor, toolbar;
     private IJSObjectReference? module;
-    private List<Row> rows = [];
+    private MudDataGrid<Row>? grid;
+    private List<string> origins = [];
+    private string? search, originFilter;
+    private StateFilter state = StateFilter.All;
     private string origin = "", title = "", login = "";
     private DateTime? published;
     private long? editingId;
@@ -125,8 +154,10 @@
     {
         login = (await AuthState.GetAuthenticationStateAsync()).User.Identity?.Name ?? "";
         published = Today;
-        await LoadAsync();
+        await LoadOriginsAsync();
     }
+
+    private bool Filtered => !string.IsNullOrWhiteSpace(search) || originFilter is not null || state != StateFilter.All;
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
@@ -136,22 +167,61 @@
         await module.InvokeVoidAsync("init", editor, toolbar, "");
     }
 
-    private async Task LoadAsync()
+    private async Task LoadOriginsAsync()
     {
         await using var db = await DbFactory.CreateDbContextAsync();
-        var items = await UserEntryService.Mine(db).AsNoTracking()
-            .OrderByDescending(i => i.FirstSeenAt)
-            .Select(i => new { i.Id, i.PublishedOn, i.Origin, i.Title, i.ReportedAt, i.CreatedBy, i.ReportId })
-            .Take(200).ToListAsync();
-        var reportIds = items.Where(i => i.ReportId != null).Select(i => i.ReportId!.Value).Distinct().ToList();
-        var reports = await db.Reports.AsNoTracking().Where(r => reportIds.Contains(r.Id))
-            .Select(r => new { r.Id, r.Kind, r.PeriodStart, r.Date }).ToListAsync();
-        var keys = reports.ToDictionary(r => r.Id, r => new ZdrowieInfo.Server.Reports.ReportKey(r.Kind, r.PeriodStart, r.Date));
-        rows = items.Select(i =>
+        origins = await UserEntryService.Mine(db).Where(i => i.Origin != null).Select(i => i.Origin!).Distinct().OrderBy(o => o).ToListAsync();
+    }
+
+    /// <summary>Lista i filtry po stronie bazy (stronicowanie jak w pozostałych tabelach panelu).</summary>
+    private async Task<GridData<Row>> LoadServerData(GridState<Row> gridState, CancellationToken ct)
+    {
+        await using var db = await DbFactory.CreateDbContextAsync(ct);
+        var query = UserEntryService.Mine(db).AsNoTracking();
+        if (!string.IsNullOrWhiteSpace(search))
         {
-            var key = i.ReportId is { } id && keys.TryGetValue(id, out var k) ? k : (ZdrowieInfo.Server.Reports.ReportKey?)null;
-            return new Row(i.Id, i.PublishedOn, i.Origin ?? "", i.Title, i.ReportedAt, i.CreatedBy, key?.Slug, key?.Label);
-        }).ToList();
+            var pattern = "%" + search.Trim().Replace("\\", "\\\\").Replace("%", "\\%").Replace("_", "\\_") + "%";
+            query = query.Where(i => EF.Functions.ILike(i.Title, pattern) || EF.Functions.ILike(i.Origin!, pattern));
+        }
+        if (originFilter is not null) query = query.Where(i => i.Origin == originFilter);
+        if (state == StateFilter.Pending) query = query.Where(i => i.ReportedAt == null);
+        if (state == StateFilter.Reported) query = query.Where(i => i.ReportedAt != null);
+
+        var total = await query.CountAsync(ct);
+        var items = await query.OrderByDescending(i => i.FirstSeenAt).ThenByDescending(i => i.Id)
+            .Skip(gridState.Page * gridState.PageSize).Take(gridState.PageSize)
+            .Select(i => new { i.Id, i.PublishedOn, i.Origin, i.Title, i.ReportedAt, i.CreatedBy, i.ReportId })
+            .ToListAsync(ct);
+        var reportIds = items.Where(i => i.ReportId != null).Select(i => i.ReportId!.Value).Distinct().ToList();
+        var keys = (await db.Reports.AsNoTracking().Where(r => reportIds.Contains(r.Id))
+                .Select(r => new { r.Id, r.Kind, r.PeriodStart, r.Date }).ToListAsync(ct))
+            .ToDictionary(r => r.Id, r => new ZdrowieInfo.Server.Reports.ReportKey(r.Kind, r.PeriodStart, r.Date));
+        return new GridData<Row>
+        {
+            TotalItems = total,
+            Items = items.Select(i =>
+            {
+                var key = i.ReportId is { } id && keys.TryGetValue(id, out var k) ? k : (ZdrowieInfo.Server.Reports.ReportKey?)null;
+                return new Row(i.Id, i.PublishedOn, i.Origin ?? "", i.Title, i.ReportedAt, i.CreatedBy, key?.Slug, key?.Label);
+            }).ToList(),
+        };
+    }
+
+    private async Task LoadAsync()
+    {
+        await LoadOriginsAsync();
+        if (grid is not null) await grid.ReloadServerData();
+    }
+
+    private Task SearchChanged(string? value) { search = value; return Reload(); }
+    private Task OriginChanged(string? value) { originFilter = value; return Reload(); }
+    private Task StateChanged(StateFilter value) { state = value; return Reload(); }
+    // Nowy filtr – od pierwszej strony (inaczej można zostać na stronie, której już nie ma).
+    private async Task Reload()
+    {
+        if (grid is null) return;
+        grid.NavigateTo(Page.First);
+        await grid.ReloadServerData();
     }
 
     private async Task Save()
@@ -203,6 +273,17 @@
         title = "";
         published = Today;
         if (module is not null) await module.InvokeVoidAsync("setHtml", editor, "");
+    }
+
+    private async Task Release(Row row)
+    {
+        var report = row.ReportLabel is { } label ? $"Raport {label} zostaje bez zmian, a wpis" : "Wpis";
+        if (await Dialogs.ShowMessageBoxAsync("Przywrócić wpis jako niezaraportowany?",
+                $"{report} „{row.Title}” trafi do najbliższego raportu dziennego (albo do ponownie przygotowanego raportu za wczoraj lub dziś). Znów będzie można go zmienić albo usunąć.",
+                yesText: "Przywróć", cancelText: "Anuluj") != true) return;
+        var result = await Entries.ReleaseAsync(row.Id);
+        Snackbar.Add(result.Ok ? "Wpis czeka na raport." : result.Error ?? "Nie udało się przywrócić wpisu.", result.Ok ? Severity.Success : Severity.Error);
+        await LoadAsync();
     }
 
     private async Task Delete(Row row)

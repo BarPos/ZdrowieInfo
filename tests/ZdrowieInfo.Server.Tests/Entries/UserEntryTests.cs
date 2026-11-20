@@ -101,6 +101,46 @@ public class UserEntryTests(PostgresFixture postgres)
     }
 
     [Fact]
+    public async Task Released_entry_goes_to_the_next_report_and_the_old_report_stays()
+    {
+        var generator = new ScriptedGenerator();
+        await using var app = await AppFactory.CreateAsync(postgres, services: s => s.AddSingleton<IReportGenerator>(generator));
+        var created = await Entries(app).CreateAsync(new UserEntryInput("CSIRT MON", "Podatność w FortiOS", CsirtHtml, Day), "admin");
+        var id = created.Id!.Value;
+        for (var i = 0; i < 2; i++)
+            generator.Replies.Enqueue(r => ScriptedGenerator.Result(new ReportDocument
+            {
+                Title = "Raport", Summary = "Podatność.",
+                Findings = [new FindingDto { Importance = "wysoka", Category = "bezpieczeństwo", Headline = "FortiOS", Body = "Aktualizacja.", Citations = [new CitationDto { ItemId = r.Items[0].Id, Quote = "FortiOS | 7.4.3" }] }],
+            }));
+        var reports = app.Services.GetRequiredService<DailyReportService>();
+        var first = await reports.GenerateAsync(Day);
+        Assert.False((await Entries(app).ReleaseAsync(-1)).Ok);
+
+        var released = await Entries(app).ReleaseAsync(id);
+
+        Assert.True(released.Ok);
+        Assert.False((await Entries(app).ReleaseAsync(id)).Ok); // już czeka na raport
+        await using (var db = await app.DbAsync())
+        {
+            var item = await UserEntryService.Mine(db).AsNoTracking().SingleAsync();
+            Assert.Null(item.ReportedAt);
+            Assert.Null(item.ReportId);
+            // Stary raport bez zmian: cytat i lista wpisów nadal wskazują wpis.
+            var old = await db.Reports.AsNoTracking().Include(r => r.Findings).ThenInclude(f => f.Citations).SingleAsync(r => r.Id == first.ReportId);
+            Assert.Equal(id, old.Findings.Single().Citations.Single().SourceItemId);
+            Assert.Contains(id, old.InputItemIds);
+        }
+
+        var next = await reports.GenerateAsync(Day.AddDays(1));
+
+        Assert.Equal(ReportRunOutcome.Created, next.Outcome);
+        Assert.Equal("Podatność w FortiOS", Assert.Single(generator.Requests[1].Items).Title);
+        await using (var db = await app.DbAsync())
+            Assert.Equal(next.ReportId, (await UserEntryService.Mine(db).AsNoTracking().SingleAsync()).ReportId);
+    }
+
+    [Fact]
     public async Task Unreported_entry_can_be_edited_and_deleted_and_bad_input_is_refused()
     {
         await using var app = await AppFactory.CreateAsync(postgres);

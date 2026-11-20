@@ -89,6 +89,23 @@ public sealed class UserEntryService(IDbContextFactory<ZdrowieInfoDbContext> dbF
         return new UserEntryResult(true, id);
     }
 
+    /// <summary>
+    /// Wpis z raportu wraca do stanu „czeka na raport”: trafi do najbliższego raportu dziennego, znów można go zmienić
+    /// albo usunąć. Raport, w którym był, zostaje bez zmian (cytaty mają własną kopię tytułu i fragmentu).
+    /// </summary>
+    public async Task<UserEntryResult> ReleaseAsync(long id, CancellationToken ct = default)
+    {
+        await using var db = await dbFactory.CreateDbContextAsync(ct);
+        var item = await Mine(db).SingleOrDefaultAsync(i => i.Id == id, ct);
+        if (item is null) return new UserEntryResult(false, id, "Nie ma takiego wpisu.");
+        if (item.ReportedAt is null) return new UserEntryResult(false, id, "Wpis już czeka na raport.");
+        item.ReportedAt = null;
+        item.ReportId = null;
+        item.LastChangedAt = time.GetUtcNow();
+        await db.SaveChangesAsync(ct);
+        return new UserEntryResult(true, id);
+    }
+
     /// <summary>Wpisy własne (do listy w panelu i strony wpisu).</summary>
     public static IQueryable<SourceItem> Mine(ZdrowieInfoDbContext db) =>
         from i in db.SourceItems

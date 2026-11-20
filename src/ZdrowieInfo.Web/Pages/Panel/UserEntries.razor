@@ -1,0 +1,224 @@
+@page "/panel/wpisy-wlasne"
+@rendermode InteractiveServer
+@implements IAsyncDisposable
+@using Microsoft.EntityFrameworkCore
+@using ZdrowieInfo.Server.Common
+@using ZdrowieInfo.Server.Data
+@using ZdrowieInfo.Server.Entries
+@inject IDbContextFactory<ZdrowieInfoDbContext> DbFactory
+@inject UserEntryService Entries
+@inject WarsawClock Clock
+@inject AuthenticationStateProvider AuthState
+@inject IJSRuntime JS
+@inject ISnackbar Snackbar
+@inject IDialogService Dialogs
+
+<PageTitle>Wpisy własne – ZdrowieInfo</PageTitle>
+
+<AdminShell>
+    <MudText Typo="Typo.h4" Class="mb-2">Wpisy własne</MudText>
+    <MudText Typo="Typo.body2" Class="mb-4">
+        Komunikaty spoza monitorowanych stron, np. jawne ostrzeżenia CSIRT MON z poczty. Wpis trafia do najbliższego raportu
+        dziennego, który obejmuje jego datę – z dzisiejszą datą do jutrzejszego porannego raportu. Treść jest wysyłana do Claude API
+        (i do sprawdzania podatności w internecie, jeśli jest włączone), więc wklejaj tylko komunikaty jawne.
+    </MudText>
+
+    <MudPaper Class="pa-4 mb-4" Elevation="1">
+        <MudText Typo="Typo.h6" Class="mb-2">@(editingId is null ? "Nowy wpis" : "Edycja wpisu")</MudText>
+        <MudGrid Spacing="2">
+            <MudItem xs="12" sm="4">
+                <MudTextField T="string" @bind-Value="origin" Label="Źródło" Placeholder="np. CSIRT MON" MaxLength="200" />
+            </MudItem>
+            <MudItem xs="12" sm="5">
+                <MudTextField T="string" @bind-Value="title" Label="Tytuł komunikatu" MaxLength="500" />
+            </MudItem>
+            <MudItem xs="12" sm="3">
+                <MudDatePicker Label="Data publikacji" @bind-Date="published" MaxDate="Today" DateFormat="dd.MM.yyyy" />
+            </MudItem>
+        </MudGrid>
+
+        <MudText Typo="Typo.subtitle2" Class="mt-4 mb-1">Treść komunikatu</MudText>
+        <div class="rt">
+            <div class="rt-toolbar" @ref="toolbar">
+                <button type="button" data-cmd="bold" title="Pogrubienie"><b>B</b></button>
+                <button type="button" data-cmd="italic" title="Kursywa"><i>I</i></button>
+                <button type="button" data-cmd="h3" title="Nagłówek">Nagłówek</button>
+                <button type="button" data-cmd="p" title="Zwykły akapit">Akapit</button>
+                <button type="button" data-cmd="insertUnorderedList" title="Lista punktowana">• Lista</button>
+                <button type="button" data-cmd="insertOrderedList" title="Lista numerowana">1. Lista</button>
+                <button type="button" data-cmd="table" title="Wstaw tabelę 2×2">Tabela</button>
+                <button type="button" data-cmd="removeFormat" title="Usuń formatowanie zaznaczenia">Wyczyść</button>
+            </div>
+            @* Pusty w drzewie Blazora – treścią zarządza richtext.js. *@
+            <div class="rt-editor" contenteditable="true" @ref="editor" role="textbox" aria-multiline="true" aria-label="Treść komunikatu"></div>
+        </div>
+        <MudText Typo="Typo.caption" Class="mt-1">Wklej komunikat z poczty albo strony – tabele, listy i pogrubienia zostają. Obrazy, style i skrypty są usuwane.</MudText>
+
+        <MudStack Row="true" Spacing="2" Class="mt-3">
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" Disabled="saving" OnClick="Save">@(editingId is null ? "Dodaj wpis" : "Zapisz zmiany")</MudButton>
+            @if (editingId is not null)
+            {
+                <MudButton Variant="Variant.Text" Disabled="saving" OnClick="CancelEdit">Anuluj edycję</MudButton>
+            }
+        </MudStack>
+    </MudPaper>
+
+    <MudSimpleTable Dense="true" Hover="true">
+        <thead><tr><th>Data</th><th>Źródło</th><th>Tytuł</th><th>Stan</th><th>Dodał</th><th></th></tr></thead>
+        <tbody>
+            @if (rows.Count == 0)
+            {
+                <tr><td colspan="6">Nie ma jeszcze wpisów własnych.</td></tr>
+            }
+            @foreach (var row in rows)
+            {
+                <tr>
+                    <td>@Labels.Date(row.PublishedOn)</td>
+                    <td>@row.Origin</td>
+                    <td><MudLink Href="@($"wpisy-wlasne/{row.Id}")">@row.Title</MudLink></td>
+                    <td>
+                        @if (row.ReportedAt is null)
+                        {
+                            <MudChip T="string" Size="Size.Small" Color="Color.Info">czeka na raport</MudChip>
+                        }
+                        else if (row.ReportSlug is { } slug)
+                        {
+                            <MudLink Href="@($"raporty/{slug}")">w raporcie @row.ReportLabel</MudLink>
+                        }
+                        else
+                        {
+                            <span>zaraportowany</span>
+                        }
+                    </td>
+                    <td>@row.CreatedBy</td>
+                    <td style="white-space:nowrap">
+                        @if (row.ReportedAt is null)
+                        {
+                            <MudTooltip Text="Edytuj">
+                                <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small" aria-label="Edytuj" OnClick="() => Edit(row.Id)" />
+                            </MudTooltip>
+                            <MudTooltip Text="Usuń">
+                                <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error" aria-label="Usuń" OnClick="() => Delete(row)" />
+                            </MudTooltip>
+                        }
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </MudSimpleTable>
+</AdminShell>
+
+@code {
+    private sealed record Row(long Id, DateOnly? PublishedOn, string Origin, string Title, DateTimeOffset? ReportedAt, string? CreatedBy, string? ReportSlug, string? ReportLabel);
+
+    private ElementReference editor, toolbar;
+    private IJSObjectReference? module;
+    private List<Row> rows = [];
+    private string origin = "", title = "", login = "";
+    private DateTime? published;
+    private long? editingId;
+    private bool saving;
+
+    private DateTime Today => Clock.Today.ToDateTime(TimeOnly.MinValue);
+
+    protected override async Task OnInitializedAsync()
+    {
+        login = (await AuthState.GetAuthenticationStateAsync()).User.Identity?.Name ?? "";
+        published = Today;
+        await LoadAsync();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+        // Specyfikator modułu musi być względny („./”), inaczej przeglądarka go nie rozwiąże.
+        module = await JS.InvokeAsync<IJSObjectReference>("import", "./" + Assets["_content/ZdrowieInfo.Web/js/richtext.js"]);
+        await module.InvokeVoidAsync("init", editor, toolbar, "");
+    }
+
+    private async Task LoadAsync()
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        var items = await UserEntryService.Mine(db).AsNoTracking()
+            .OrderByDescending(i => i.FirstSeenAt)
+            .Select(i => new { i.Id, i.PublishedOn, i.Origin, i.Title, i.ReportedAt, i.CreatedBy, i.ReportId })
+            .Take(200).ToListAsync();
+        var reportIds = items.Where(i => i.ReportId != null).Select(i => i.ReportId!.Value).Distinct().ToList();
+        var reports = await db.Reports.AsNoTracking().Where(r => reportIds.Contains(r.Id))
+            .Select(r => new { r.Id, r.Kind, r.PeriodStart, r.Date }).ToListAsync();
+        var keys = reports.ToDictionary(r => r.Id, r => new ZdrowieInfo.Server.Reports.ReportKey(r.Kind, r.PeriodStart, r.Date));
+        rows = items.Select(i =>
+        {
+            var key = i.ReportId is { } id && keys.TryGetValue(id, out var k) ? k : (ZdrowieInfo.Server.Reports.ReportKey?)null;
+            return new Row(i.Id, i.PublishedOn, i.Origin ?? "", i.Title, i.ReportedAt, i.CreatedBy, key?.Slug, key?.Label);
+        }).ToList();
+    }
+
+    private async Task Save()
+    {
+        if (module is null || published is null) return;
+        saving = true;
+        try
+        {
+            var html = await module.InvokeAsync<string>("getHtml", editor);
+            var input = new UserEntryInput(origin, title, html, DateOnly.FromDateTime(published.Value));
+            var result = editingId is { } id ? await Entries.UpdateAsync(id, input) : await Entries.CreateAsync(input, login);
+            if (!result.Ok)
+            {
+                Snackbar.Add(result.Error ?? "Nie udało się zapisać wpisu.", Severity.Error);
+                return;
+            }
+            Snackbar.Add(editingId is null ? "Dodano wpis – trafi do najbliższego raportu." : "Zapisano zmiany.", Severity.Success);
+            editingId = null;
+            title = "";
+            published = Today;
+            await module.InvokeVoidAsync("setHtml", editor, "");
+            await LoadAsync();
+        }
+        catch (JSException e)
+        {
+            Snackbar.Add($"Nie udało się odczytać treści z edytora: {e.Message}", Severity.Error);
+        }
+        finally
+        {
+            saving = false;
+        }
+    }
+
+    private async Task Edit(long id)
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        var item = await UserEntryService.Mine(db).AsNoTracking().SingleOrDefaultAsync(i => i.Id == id);
+        if (item is null || module is null) return;
+        editingId = id;
+        origin = item.Origin ?? "";
+        title = item.Title;
+        published = item.PublishedOn?.ToDateTime(TimeOnly.MinValue) ?? Today;
+        await module.InvokeVoidAsync("setHtml", editor, item.ContentHtml ?? "");
+    }
+
+    private async Task CancelEdit()
+    {
+        editingId = null;
+        title = "";
+        published = Today;
+        if (module is not null) await module.InvokeVoidAsync("setHtml", editor, "");
+    }
+
+    private async Task Delete(Row row)
+    {
+        if (await Dialogs.ShowMessageBoxAsync("Usunąć wpis?", $"Wpis „{row.Title}” zostanie usunięty. Tego nie da się cofnąć.",
+                yesText: "Usuń", cancelText: "Anuluj") != true) return;
+        var result = await Entries.DeleteAsync(row.Id);
+        Snackbar.Add(result.Ok ? "Usunięto wpis." : result.Error ?? "Nie udało się usunąć wpisu.", result.Ok ? Severity.Success : Severity.Error);
+        if (editingId == row.Id) await CancelEdit();
+        await LoadAsync();
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (module is null) return;
+        try { await module.DisposeAsync(); }
+        catch (JSDisconnectedException) { }
+    }
+}

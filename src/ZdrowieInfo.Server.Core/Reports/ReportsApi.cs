@@ -75,7 +75,7 @@ public static class ReportsApi
         var pending = await (from i in db.SourceItems.AsNoTracking()
                              join s in db.Sources on i.SourceId equals s.Id
                              where i.ReportedAt == null && !i.IsBaseline
-                             select new PendingItem(i, s.Name)).ToListAsync(ct);
+                             select new PendingItem(i, i.Origin != null ? i.Origin + " (wpis własny)" : s.Name)).ToListAsync(ct);
         return ReportComposer.BuildInputs(pending);
     }
 }

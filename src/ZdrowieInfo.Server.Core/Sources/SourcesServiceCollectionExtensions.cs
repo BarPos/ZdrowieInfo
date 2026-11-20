@@ -55,6 +55,7 @@ public static class SourcesServiceCollectionExtensions
         services.AddSingleton<SourceScheduler>();
         services.AddSingleton<SourceSeeder>();
         services.AddSingleton<SourceAdminService>();
+        services.AddSingleton<Entries.UserEntryService>();
         services.AddHostedService<SchedulerService>();
         return services;
     }

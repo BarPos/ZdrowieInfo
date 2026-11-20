@@ -61,8 +61,8 @@ public sealed class SourceScheduler(
         var cutoff = time.GetUtcNow() - options.Value.ItemContentRetention;
         await using var db = await dbFactory.CreateDbContextAsync(ct);
         var cleared = await db.SourceItems
-            .Where(i => i.FirstSeenAt < cutoff && i.Content != null)
-            .ExecuteUpdateAsync(u => u.SetProperty(i => i.Content, (string?)null), ct);
+            .Where(i => i.FirstSeenAt < cutoff && (i.Content != null || i.ContentHtml != null))
+            .ExecuteUpdateAsync(u => u.SetProperty(i => i.Content, (string?)null).SetProperty(i => i.ContentHtml, (string?)null), ct);
         if (cleared > 0) logger.LogInformation("Usunięto treść {Count} wpisów starszych niż {Days} dni.", cleared, options.Value.ItemContentRetention.TotalDays);
         return cleared;
     }

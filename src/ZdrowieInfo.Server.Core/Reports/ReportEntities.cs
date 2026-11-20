@@ -73,6 +73,9 @@ public sealed class Report
     public List<SourceStateEntry> SourcesState { get; set; } = [];
 
     public AiUsage? AiUsage { get; set; }
+
+    /// <summary>Szczegóły podatności sprawdzone w internecie przed analizą (null – nie sprawdzano).</summary>
+    public VulnerabilityResearch? Research { get; set; }
     public int GenerationAttempts { get; set; }
     public string? Error { get; set; }
     public List<string> ValidationIssues { get; set; } = [];
@@ -127,7 +130,7 @@ public sealed class FindingCitation
 }
 
 /// <summary>Zużycie Claude API dla raportu.</summary>
-public sealed record AiUsage(long InputTokens, long OutputTokens, long CacheReadTokens, long CacheWriteTokens, int Calls);
+public sealed record AiUsage(long InputTokens, long OutputTokens, long CacheReadTokens, long CacheWriteTokens, int Calls, int WebSearches = 0);
 
 /// <summary>Jedno źródło w sekcji „Stan źródeł”.</summary>
 public sealed record SourceStateEntry(

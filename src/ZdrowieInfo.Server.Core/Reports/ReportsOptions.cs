@@ -21,4 +21,10 @@ public sealed class ReportsOptions
     public TimeOnly RetryUntil { get; set; } = new(6, 20);
 
     public int MaxOutputTokens { get; set; } = 16_000;
+
+    /// <summary>
+    /// Sprawdzanie podatności w internecie (przed analizą) trwa najwyżej tyle – potem raport powstaje bez niego, z uwagą.
+    /// Czas rzeczywisty: wyszukiwanie nie może przesunąć porannego raportu poza okno ponowień.
+    /// </summary>
+    public TimeSpan ResearchTimeout { get; set; } = TimeSpan.FromMinutes(3);
 }

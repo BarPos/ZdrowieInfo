@@ -83,6 +83,20 @@ Wpisy źródłowe: & {{ entries_count }} \\
 {{ end }}
 {{ end }}
 
+{{ if research }}
+\section{Szczegóły podatności z internetu}
+{\small\color{muted}Sprawdzone automatycznie w internecie przed analizą (liczba wyszukiwań: {{ research.searches }}). Nie pochodzą z monitorowanych źródeł i nie są objęte sprawdzaniem cytatów.}\par
+{{ research.notes | latex }}
+{{ if research.sources.size > 0 }}
+\par{\small\color{muted}Źródła:}
+\begin{itemize}[leftmargin=1.2em]
+{{ for s in research.sources }}
+\item \href{ {{- s.url | latex_url -}} }{ {{- s.title | latex_line -}} }
+{{ end }}
+\end{itemize}
+{{ end }}
+{{ end }}
+
 {{ if is_ai_error && entries.size > 0 }}
 \section{Wykryte wpisy (bez analizy)}
 \begin{enumerate}[leftmargin=1.6em]

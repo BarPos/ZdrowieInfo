@@ -17,6 +17,12 @@ public static class ReportsServiceCollectionExtensions
             string.Equals(sp.GetRequiredService<IOptions<ReportsOptions>>().Value.Generator, "Sample", StringComparison.OrdinalIgnoreCase)
                 ? sp.GetRequiredService<SampleReportGenerator>()
                 : sp.GetRequiredService<ClaudeReportGenerator>());
+        // Sprawdzanie podatności w internecie – tylko z Claude (generator przykładowy pracuje bez API).
+        services.AddSingleton<ClaudeVulnerabilityResearcher>();
+        services.AddSingleton<IVulnerabilityResearcher>(sp =>
+            string.Equals(sp.GetRequiredService<IOptions<ReportsOptions>>().Value.Generator, "Sample", StringComparison.OrdinalIgnoreCase)
+                ? new NoVulnerabilityResearcher()
+                : sp.GetRequiredService<ClaudeVulnerabilityResearcher>());
         services.AddSingleton<DailyReportService>();
         services.AddSingleton<ReportScheduler>();
         services.AddSingleton<ReportJobQueue>();

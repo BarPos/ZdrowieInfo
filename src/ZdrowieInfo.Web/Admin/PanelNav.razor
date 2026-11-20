@@ -14,6 +14,7 @@
         ("panel/zrodla", "Źródła"),
         ("panel/uruchomienia", "Uruchomienia"),
         ("panel/wpisy", "Wpisy"),
+        ("panel/wpisy-wlasne", "Wpisy własne"),
         ("panel/raporty", "Raporty"),
         ("panel/uzytkownicy", "Użytkownicy"),
         ("panel/ustawienia", "Ustawienia"),
@@ -24,6 +25,6 @@
     private bool IsActive(string href)
     {
         var path = Nav.ToBaseRelativePath(Nav.Uri).Split('?')[0].TrimEnd('/');
-        return href == "panel" ? path == "panel" : path.StartsWith(href, StringComparison.Ordinal);
+        return path == href || (href != "panel" && path.StartsWith(href + "/", StringComparison.Ordinal));
     }
 }

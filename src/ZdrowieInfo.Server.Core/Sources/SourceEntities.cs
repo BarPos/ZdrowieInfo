@@ -183,6 +183,15 @@ public sealed class SourceItem
     /// </summary>
     public DateTimeOffset? ReportedAt { get; set; }
     public long? ReportId { get; set; }
+
+    /// <summary>Wpis własny (panel → Wpisy własne): skąd pochodzi komunikat, np. „CSIRT MON”. Null – wpis ze źródła.</summary>
+    public string? Origin { get; set; }
+
+    /// <summary>Wpis własny: treść jako oczyszczony HTML (tabele, listy); <see cref="Content"/> to jej tekst dla analizy.</summary>
+    public string? ContentHtml { get; set; }
+
+    /// <summary>Wpis własny: kto go dodał (login).</summary>
+    public string? CreatedBy { get; set; }
 }
 
 /// <summary>Problem z dostępem do źródła (tabela <c>source_incidents</c>), przechowywany bezterminowo.</summary>

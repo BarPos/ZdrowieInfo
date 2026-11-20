@@ -80,6 +80,14 @@ public sealed class LatexReportRenderer(IOptions<ExportOptions> options, TimePro
         model["ignored"] = view.Ignored.Select(i => new ScriptObject { ["title"] = i.Title, ["url"] = i.Url ?? "", ["reason"] = i.Reason }).ToList();
         model["source_problems"] = view.SourceProblems.Select(s => new ScriptObject { ["name"] = s.Name, ["url"] = s.Url, ["text"] = s.Problem ?? s.Warning }).ToList();
         model["recoveries"] = view.Recoveries.ToList();
+        model["research"] = view.Research is { } research
+            ? new ScriptObject
+            {
+                ["notes"] = research.Notes,
+                ["searches"] = research.Searches,
+                ["sources"] = research.Sources.Select(s => new ScriptObject { ["title"] = s.Title, ["url"] = s.Url }).ToList(),
+            }
+            : null;
         model["entries"] = view.Entries.Select(e => new ScriptObject
         {
             ["title"] = e.Title, ["url"] = e.Url, ["source"] = e.Source, ["date"] = e.PublishedOn?.ToString("dd.MM.yyyy"),

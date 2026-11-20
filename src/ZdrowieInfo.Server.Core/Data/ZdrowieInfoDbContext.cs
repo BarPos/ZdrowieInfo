@@ -108,6 +108,8 @@ public sealed class ZdrowieInfoDbContext(DbContextOptions<ZdrowieInfoDbContext> 
             e.Property(x => x.Kind).HasConversion<string>().HasMaxLength(20);
             e.HasIndex(x => x.ReportedAt);
             e.HasOne<Report>().WithMany().HasForeignKey(x => x.ReportId).OnDelete(DeleteBehavior.SetNull);
+            e.Property(x => x.Origin).HasMaxLength(200);
+            e.Property(x => x.CreatedBy).HasMaxLength(256);
         });
 
         builder.Entity<SourceIncident>(e =>
@@ -143,6 +145,7 @@ public sealed class ZdrowieInfoDbContext(DbContextOptions<ZdrowieInfoDbContext> 
             e.Property(x => x.Body).HasColumnType("jsonb").HasConversion(Json<ReportDocument>(), JsonComparer<ReportDocument>());
             e.Property(x => x.SourcesState).HasColumnType("jsonb").HasConversion(Json<List<SourceStateEntry>>(), JsonComparer<List<SourceStateEntry>>());
             e.Property(x => x.AiUsage).HasColumnType("jsonb").HasConversion(Json<AiUsage?>(), JsonComparer<AiUsage?>());
+            e.Property(x => x.Research).HasColumnType("jsonb").HasConversion(Json<VulnerabilityResearch?>(), JsonComparer<VulnerabilityResearch?>());
             e.HasMany(x => x.Findings).WithOne().HasForeignKey(x => x.ReportId).OnDelete(DeleteBehavior.Cascade);
             e.Property(x => x.SearchVector).HasColumnType("tsvector").HasComputedColumnSql(
                 $"setweight(to_tsvector('{SearchConfig}'::regconfig, coalesce(title, '')), 'A') || setweight(to_tsvector('{SearchConfig}'::regconfig, coalesce(summary, '')), 'B')", stored: true);

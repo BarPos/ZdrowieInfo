@@ -74,7 +74,7 @@
         var query = from i in db.SourceItems.AsNoTracking()
                     join s in db.Sources on i.SourceId equals s.Id
                     where (showBaseline || !i.IsBaseline) && (sourceId == null || i.SourceId == sourceId)
-                    select new { i, s.Name };
+                    select new { i, Name = i.Origin != null ? i.Origin + " (wpis własny)" : s.Name };
         var total = await query.CountAsync(ct);
         var page = await query.OrderByDescending(x => x.i.LastChangedAt).ThenByDescending(x => x.i.Id)
             .Skip(state.Page * state.PageSize).Take(state.PageSize).ToListAsync(ct);

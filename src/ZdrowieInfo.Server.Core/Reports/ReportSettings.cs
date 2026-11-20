@@ -37,12 +37,16 @@ public sealed class ReportSettings(AppSettingsStore store)
     private const string ApiKeyKey = "claude.api_key";
     private const string AttemptsKey = "reports.attempts";
     private const string SkipKey = "reports.skip_date";
+    private const string ResearchKey = "research.settings";
 
     public async Task<ClinicProfile> GetProfileAsync(CancellationToken ct = default) => await store.GetAsync<ClinicProfile>(ProfileKey, ct) ?? new();
     public Task SetProfileAsync(ClinicProfile profile, CancellationToken ct = default) => store.SetAsync(ProfileKey, profile, ct: ct);
 
     public async Task<ClaudeSettings> GetClaudeAsync(CancellationToken ct = default) => await store.GetAsync<ClaudeSettings>(ClaudeKey, ct) ?? new();
     public Task SetClaudeAsync(ClaudeSettings settings, CancellationToken ct = default) => store.SetAsync(ClaudeKey, settings, ct: ct);
+
+    public async Task<ResearchSettings> GetResearchAsync(CancellationToken ct = default) => await store.GetAsync<ResearchSettings>(ResearchKey, ct) ?? new();
+    public Task SetResearchAsync(ResearchSettings research, CancellationToken ct = default) => store.SetAsync(ResearchKey, research, ct: ct);
 
     public Task<string?> GetApiKeyAsync(CancellationToken ct = default) => store.GetAsync<string>(ApiKeyKey, ct);
     public Task SetApiKeyAsync(string key, CancellationToken ct = default) => store.SetAsync(ApiKeyKey, key.Trim(), isProtected: true, ct);

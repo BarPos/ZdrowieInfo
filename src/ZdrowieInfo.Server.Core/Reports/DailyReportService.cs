@@ -36,6 +36,8 @@ public sealed record ExternalReportResult(ExternalReportOutcome Outcome, long? R
 public sealed class DailyReportService(
     IDbContextFactory<ZdrowieInfoDbContext> dbFactory,
     IReportGenerator generator,
+    IVulnerabilityResearcher researcher,
+    IOptions<ReportsOptions> reportsOptions,
     ReportSettings settings,
     TimeProvider time,
     ReportExporter exporter,
@@ -114,7 +116,7 @@ public sealed class DailyReportService(
                                  where ((withPending && i.ReportedAt == null
                                             && (i.Kind == Sources.SourceItemKind.PageChange || i.PublishedOn == null || i.PublishedOn <= date))
                                         || (replaceId != null && i.ReportId == replaceId)) && !i.IsBaseline
-                                 select new PendingItem(i, s.Name)).ToListAsync(ct);
+                                 select new PendingItem(i, i.Origin != null ? i.Origin + " (wpis własny)" : s.Name)).ToListAsync(ct);
             var previous = await db.Reports.AsNoTracking().Daily().Where(r => r.Date < date).OrderByDescending(r => r.Date).Select(r => (DateTimeOffset?)r.CreatedAt).FirstOrDefaultAsync(ct);
             var sourcesState = await SourcesStateBuilder.BuildAsync(db, previous ?? now.AddDays(-1), ct);
 
@@ -242,7 +244,7 @@ public sealed class DailyReportService(
             var query = from i in db2.SourceItems.AsNoTracking()
                         join s in db2.Sources on i.SourceId equals s.Id
                         where ids.Contains(i.Id)
-                        select new PendingItem(i, s.Name);
+                        select new PendingItem(i, i.Origin != null ? i.Origin + " (wpis własny)" : s.Name);
             // Liczba wpisów przed pobieraniem treści – za szeroki okres nie pobiera setek artykułów, żeby potem odmówić.
             var count = ReportComposer.BuildInputs(await query.ToListAsync(ct)).Count;
             if (count > MaxRetrospectiveInputs)
@@ -404,7 +406,7 @@ public sealed class DailyReportService(
             var pending = await (from i in db.SourceItems.AsNoTracking()
                                  join s in db.Sources on i.SourceId equals s.Id
                                  where (i.ReportedAt == null || (existing != null && i.ReportId == existing.Id)) && !i.IsBaseline
-                                 select new PendingItem(i, s.Name)).ToListAsync(ct);
+                                 select new PendingItem(i, i.Origin != null ? i.Origin + " (wpis własny)" : s.Name)).ToListAsync(ct);
             var inputs = ReportComposer.BuildInputs(pending);
             var validation = ReportValidator.Validate(document, inputs, requireCoverage: false, allowUrlCitations: true);
             // Niepoprawny raport niczego nie zmienia – także przy replace=true.
@@ -439,8 +441,10 @@ public sealed class DailyReportService(
     private async Task<Report> AnalyzeAsync(GenerationRequest request, CancellationToken ct)
     {
         var (date, inputs) = (request.Key, request.Items);
+        var (research, researchUsage) = await ResearchAsync(date, inputs, ct);
+        request = request with { Research = research };
         var first = await generator.GenerateAsync(request, ct);
-        var usage = first.Usage;
+        var usage = researchUsage is null ? first.Usage : Sum(researchUsage, first.Usage);
         var result = first;
         var validation = ReportValidator.Validate(first.Document, inputs, requireCoverage: true);
 
@@ -468,7 +472,42 @@ public sealed class DailyReportService(
         report.Producer = generator.Name;
         report.Model = result.Model;
         report.AiUsage = usage;
+        report.Research = research;
+        if (research?.Error is { } researchError) report.ValidationIssues = [.. report.ValidationIssues, $"Sprawdzanie podatności w internecie: {researchError}"];
         return report;
+    }
+
+    /// <summary>
+    /// Szczegóły podatności z internetu – raz na raport (także przy poprawce po walidacji), tylko gdy włączone w panelu
+    /// i są wpisy o podatnościach. Błąd nigdy nie zatrzymuje raportu: raport powstaje bez tych informacji, z uwagą.
+    /// </summary>
+    private async Task<(VulnerabilityResearch? Research, AiUsage? Usage)> ResearchAsync(ReportKey key, IReadOnlyList<ReportInputItem> inputs, CancellationToken ct)
+    {
+        var options = await settings.GetResearchAsync(ct);
+        if (!options.Enabled) return (null, null);
+        var candidates = VulnerabilityCandidates.Select(inputs);
+        if (candidates.Count == 0) return (null, null);
+        // Limit w czasie rzeczywistym (nie TimeProvider): chroni poranny raport przed wolnym wyszukiwaniem.
+        var limit = reportsOptions.Value.ResearchTimeout;
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        timeout.CancelAfter(limit);
+        try
+        {
+            var result = await researcher.ResearchAsync(candidates, options, timeout.Token);
+            return result is null ? (null, null) : (result.Research, result.Usage);
+        }
+        catch (OperationCanceledException) when (timeout.IsCancellationRequested && !ct.IsCancellationRequested)
+        {
+            var pl = System.Globalization.CultureInfo.GetCultureInfo("pl-PL");
+            var minutes = limit.TotalMinutes >= 1 ? limit.TotalMinutes.ToString("0.#", pl) + " min" : limit.TotalSeconds.ToString("0.#", pl) + " s";
+            logger.LogWarning("Raport {Key}: sprawdzanie podatności przekroczyło {Limit} – raport bez niego.", key, minutes);
+            return (new VulnerabilityResearch("", [], 0, $"nie zakończyło się w ciągu {minutes}"), null);
+        }
+        catch (Exception e) when (!ct.IsCancellationRequested)
+        {
+            logger.LogWarning(e, "Raport {Key}: sprawdzanie podatności przerwane.", key);
+            return (new VulnerabilityResearch("", [], 0, e.Message), null);
+        }
     }
 
     /// <summary>Zamienia dokument na encje; cytaty dostają kopię tytułu, adresu i daty wpisu.</summary>
@@ -541,5 +580,6 @@ public sealed class DailyReportService(
     }
 
     private static AiUsage Sum(AiUsage a, AiUsage b) =>
-        new(a.InputTokens + b.InputTokens, a.OutputTokens + b.OutputTokens, a.CacheReadTokens + b.CacheReadTokens, a.CacheWriteTokens + b.CacheWriteTokens, a.Calls + b.Calls);
+        new(a.InputTokens + b.InputTokens, a.OutputTokens + b.OutputTokens, a.CacheReadTokens + b.CacheReadTokens, a.CacheWriteTokens + b.CacheWriteTokens,
+            a.Calls + b.Calls, a.WebSearches + b.WebSearches);
 }

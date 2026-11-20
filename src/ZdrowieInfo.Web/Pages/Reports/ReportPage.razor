@@ -85,6 +85,25 @@ else
             </section>
         }
 
+        @if (view.Research is { } research)
+        {
+            <section>
+                <h2><span class="doc-num">@(++section).</span> Szczegóły podatności z internetu</h2>
+                <p class="doc-muted">Sprawdzone automatycznie w internecie przed analizą (liczba wyszukiwań: @research.Searches). Nie pochodzą z monitorowanych źródeł i nie są objęte sprawdzaniem cytatów.</p>
+                <div class="doc-research">@research.Notes</div>
+                @if (research.Sources.Count > 0)
+                {
+                    <p class="doc-muted">Źródła:</p>
+                    <ul class="doc-list">
+                        @foreach (var s in research.Sources)
+                        {
+                            <li><a href="@s.Url" target="_blank" rel="noopener nofollow">@s.Title</a></li>
+                        }
+                    </ul>
+                }
+            </section>
+        }
+
         @if (r.Status == ReportStatus.AiError && view.Entries.Count > 0)
         {
             <section>

@@ -49,6 +49,9 @@ public sealed record ReportView(
     /// <summary>Raport wstecz i okresowy nie ma stanu źródeł z dnia raportu (dzisiejszy stan byłby mylący).</summary>
     public bool HasSourcesState => Report.SourcesState.Count > 0;
 
+    /// <summary>Szczegóły podatności z internetu – tylko gdy są notatki (sam błąd sprawdzania jest wśród uwag raportu).</summary>
+    public VulnerabilityResearch? Research => Report.Research is { HasNotes: true } research ? research : null;
+
     /// <summary>Numery sekcji: zależą od tego, które sekcje występują.</summary>
     public int SectionFindings => 2;
 
@@ -85,7 +88,7 @@ public sealed record ReportView(
                              join s in db.Sources on i.SourceId equals s.Id
                              where i.ReportId == report.Id || ids.Contains(i.Id)
                              orderby i.PublishedOn descending, i.Id
-                             select new Entry(i.Id, i.Title, i.Url, s.Name, i.PublishedOn)).ToListAsync(ct);
+                             select new Entry(i.Id, i.Title, i.Url, i.Origin != null ? i.Origin + " (wpis własny)" : s.Name, i.PublishedOn)).ToListAsync(ct);
         // Nawigacja ←/→ między raportami tego samego rodzaju.
         var same = db.Reports.Where(r => r.Kind == key.Kind);
         var previous = await same.Where(r => r.Date < key.End || (r.Date == key.End && r.PeriodStart < key.Start))

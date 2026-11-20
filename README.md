@@ -169,6 +169,8 @@ Weryfikacja dwuetapowa jest obowiązkowa dla wszystkich. **Panel → Użytkownic
 
 Klucz Claude API wpisuje się w panelu (**Panel → Ustawienia**); jest zapisywany zaszyfrowany w bazie. Tam też model (domyślnie `claude-sonnet-5-5`), effort, profil przychodni (zakresy świadczeń, KSC, lista używanych systemów) i zużycie w miesiącu. Lokalnie (`Development`) raporty przygotowuje generator przykładowy bez Claude (`ZdrowieInfo:Reports:Generator = Sample`).
 
+**Sprawdzanie podatności w internecie** (Panel → Ustawienia, domyślnie wyłączone): gdy wśród nowych wpisów jest podatność (CVE albo słowo „podatność”), przed raportem osobne wywołanie Claude z narzędziem web search sprawdza podatne wersje, poprawki i czy podatność jest wykorzystywana. Wynik ze źródłami jest osobną sekcją raportu (strona i PDF), a analiza może z niego korzystać przy ocenie ważności – cytaty nadal tylko z monitorowanych wpisów. Do wyszukiwarki nie trafia lista systemów przychodni. Koszt: $10 za 1000 wyszukiwań plus tokeny (limit wyszukiwań na raport i opcjonalna lista domen w ustawieniach). Błąd sprawdzania nie zatrzymuje raportu – trafia do jego uwag. Wyszukiwanie musi być włączone dla organizacji w Claude Console.
+
 Programy i agenci AI mogą dodawać raporty kluczem z zakresem `reports:write` (**Panel → Klucze API**):
 
 ```bash
@@ -184,6 +186,8 @@ Każdy raport ma też wersję PDF (XeLaTeX z szablonu; dla administratora przyci
 Administrator może udostępnić PDF raportu publicznym linkiem (`/udostepnione/<losowy token>`, bez logowania): na dole strony raportu **Udostępnij…** – tam też nowy losowy link (stary przestaje działać), wycofanie i usunięcie raportu.
 
 **Panel → Raporty**: raport dzienny za wcześniejszy dzień albo raport okresowy od–do (do 92 dni), z wpisów opublikowanych w tych dniach. Gdy znane wpisy źródła nie sięgają tak daleko, aplikacja przegląda starsze strony list i pobiera treść wpisów (może to potrwać kilka minut; zlecenia działają w tle). Raporty wstecz nie wysyłają powiadomień. *Odśwież PDF* przy raporcie składa sam PDF od nowa z zapisanej treści (np. po aktualizacji, która zmienia wygląd PDF) – bez wywołania Claude.
+
+**Panel → Wpisy własne**: komunikaty spoza monitorowanych stron (np. jawne ostrzeżenia CSIRT MON z poczty) – źródło, tytuł, data i treść w edytorze, do którego można wkleić komunikat z tabelami i listami (obrazy, style i skrypty są usuwane, HTML przebudowywany z listy dozwolonych znaczników). Wpis trafia do najbliższego raportu dziennego obejmującego jego datę, jak wpisy ze stron; w raporcie ma źródło „… (wpis własny)” i link do strony wpisu (dla każdego zalogowanego). Edycja i usuwanie – do czasu, aż wpis trafi do raportu. Treść jest wysyłana do Claude API – wklejaj tylko komunikaty jawne.
 
 Format raportu (`title`, `summary`, `findings[]` z `importance`, `category`, `headline`, `body`, `action`, `citations[]` z `item_id` i `quote`, `ignored[]`) — [docs/decyzje.md](docs/decyzje.md), D16–D19.
 

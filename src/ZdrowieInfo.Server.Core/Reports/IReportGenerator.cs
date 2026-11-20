@@ -4,8 +4,9 @@ namespace ZdrowieInfo.Server.Reports;
 /// <param name="PeriodStart">Raport okresowy: pierwszy dzień okresu.</param>
 /// <param name="Retrospective">Raport wstecz (wpisy opublikowane w danym dniu/okresie, nie „nowe od ostatniego raportu”).</param>
 /// <param name="ReadOn">Dzień, w którym raport jest czytany (raport z harmonogramu: rano następnego dnia) – od niego terminy.</param>
+/// <param name="Research">Szczegóły podatności sprawdzone w internecie (dane pomocnicze – nie wpis, nie do cytowania).</param>
 public sealed record GenerationRequest(DateOnly Date, ClinicProfile Profile, IReadOnlyList<ReportInputItem> Items, IReadOnlyList<string>? PreviousErrors = null,
-    DateOnly? PeriodStart = null, bool Retrospective = false, DateOnly? ReadOn = null)
+    DateOnly? PeriodStart = null, bool Retrospective = false, DateOnly? ReadOn = null, VulnerabilityResearch? Research = null)
 {
     public ReportKey Key => PeriodStart is { } start ? ReportKey.Period(start, Date) : ReportKey.Daily(Date);
 }

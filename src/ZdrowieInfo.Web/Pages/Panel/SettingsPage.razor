@@ -68,9 +68,23 @@
                 </MudPaper>
 
                 <MudPaper Class="pa-4 mb-4" Elevation="1">
+                    <MudText Typo="Typo.h6" Class="mb-2">Sprawdzanie podatności w internecie</MudText>
+                    <MudText Typo="Typo.body2" Class="mb-2">
+                        Gdy wśród nowych wpisów jest podatność (CVE albo słowo „podatność”), przed raportem Claude sprawdza w internecie
+                        podatne wersje, poprawki i czy podatność jest wykorzystywana. Wynik z listą źródeł trafia do raportu jako osobna sekcja;
+                        do wyszukiwarki nie trafia lista systemów przychodni. Płatne osobno: ok. 0,01 USD za wyszukiwanie plus tokeny wyników.
+                    </MudText>
+                    <MudSwitch T="bool" @bind-Value="researchEnabled" Color="Color.Primary" Label="Sprawdzaj podatności w internecie" />
+                    <MudNumericField T="int" @bind-Value="researchMaxSearches" Label="Najwięcej wyszukiwań na raport" Min="1" Max="20" Class="mt-2" Style="max-width:260px" />
+                    <MudTextField T="string" @bind-Value="researchDomains" Label="Szukaj tylko w domenach (opcjonalnie)" Lines="3" Sizing="InputSizing.Auto" Class="mt-2"
+                                  HelperText="Po jednej w linii, np. cert.pl, nvd.nist.gov, fortinet.com. Puste – bez ograniczenia." />
+                    <MudButton Variant="Variant.Outlined" Class="mt-3" OnClick="SaveResearch">Zapisz</MudButton>
+                </MudPaper>
+
+                <MudPaper Class="pa-4 mb-4" Elevation="1">
                     <MudText Typo="Typo.h6" Class="mb-2">Zużycie w @Clock.Today.ToString("MMMM yyyy")</MudText>
-                    <MudText>@usageCalls wywołań · @usageIn.ToString("N0") tokenów wejścia · @usageOut.ToString("N0") tokenów wyjścia</MudText>
-                    <MudText Typo="Typo.body2">Szacunkowo ok. $@usageCost.ToString("0.00") (cennik Sonnet 5.5: $2 / $10 za mln tokenów). Kredyty z planu Max: 100–200 USD miesięcznie.</MudText>
+                    <MudText>@usageCalls wywołań · @usageIn.ToString("N0") tokenów wejścia · @usageOut.ToString("N0") tokenów wyjścia@(usageSearches > 0 ? $" · {usageSearches} wyszukiwań" : "")</MudText>
+                    <MudText Typo="Typo.body2">Szacunkowo ok. $@usageCost.ToString("0.00") (cennik Sonnet 5.5: $2 / $10 za mln tokenów, wyszukiwanie $10 za 1000). Kredyty z planu Max: 100–200 USD miesięcznie.</MudText>
                 </MudPaper>
 
                 <MudPaper Class="pa-4" Elevation="1">
@@ -98,8 +112,11 @@
     private string? notes, newKey;
     private ReportAttempts? attempts;
     private long usageIn, usageOut;
-    private int usageCalls;
+    private int usageCalls, usageSearches;
     private decimal usageCost;
+    private bool researchEnabled;
+    private int researchMaxSearches = 5;
+    private string researchDomains = "";
 
     protected override async Task OnInitializedAsync()
     {
@@ -111,6 +128,10 @@
         var claude = await Settings.GetClaudeAsync();
         model = claude.Model;
         effort = claude.Effort;
+        var research = await Settings.GetResearchAsync();
+        researchEnabled = research.Enabled;
+        researchMaxSearches = research.MaxSearches;
+        researchDomains = research.AllowedDomains;
         usesClaude = !string.Equals(ReportsOptions.Value.Generator, "Sample", StringComparison.OrdinalIgnoreCase);
         await LoadKeyAsync();
         await LoadUsageAsync();
@@ -133,7 +154,9 @@
         usageIn = usages.Sum(u => u.InputTokens + u.CacheReadTokens + u.CacheWriteTokens);
         usageOut = usages.Sum(u => u.OutputTokens);
         usageCalls = usages.Sum(u => u.Calls);
-        usageCost = usages.Sum(u => u.InputTokens * 2m + u.CacheWriteTokens * 2.5m + u.CacheReadTokens * 0.1m + u.OutputTokens * 10m) / 1_000_000m;
+        usageSearches = usages.Sum(u => u.WebSearches);
+        usageCost = usages.Sum(u => u.InputTokens * 2m + u.CacheWriteTokens * 2.5m + u.CacheReadTokens * 0.1m + u.OutputTokens * 10m) / 1_000_000m
+            + usageSearches * 0.01m;
     }
 
     private void ToggleService(string service, bool on)
@@ -152,6 +175,14 @@
             Notes = string.IsNullOrWhiteSpace(notes) ? null : notes.Trim(),
         });
         Snackbar.Add("Zapisano profil przychodni.", Severity.Success);
+    }
+
+    private async Task SaveResearch()
+    {
+        var research = new ResearchSettings { Enabled = researchEnabled, MaxSearches = Math.Clamp(researchMaxSearches, 1, 20), AllowedDomains = researchDomains.Trim() };
+        await Settings.SetResearchAsync(research);
+        researchMaxSearches = research.MaxSearches;
+        Snackbar.Add(research.Enabled ? "Sprawdzanie podatności w internecie włączone." : "Sprawdzanie podatności w internecie wyłączone.", Severity.Success);
     }
 
     private async Task SaveClaude()

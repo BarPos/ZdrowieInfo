@@ -14,7 +14,9 @@ public static class WebApplicationExtensions
     /// <summary>Blazor Web App bez globalnej interaktywności; InteractiveServer tylko na stronach panelu.</summary>
     public static IServiceCollection AddZdrowieInfoWeb(this IServiceCollection services)
     {
-        services.AddRazorComponents().AddInteractiveServerComponents();
+        // Treść wklejona do edytora wpisów własnych (tabele z poczty) wraca z przeglądarki jednym komunikatem – domyślne 32 KB to za mało.
+        services.AddRazorComponents().AddInteractiveServerComponents()
+            .AddHubOptions(o => o.MaximumReceiveMessageSize = 1024 * 1024);
         // Polskie litery w HTML wprost, nie jako encje &#x142;.
         services.AddWebEncoders(o => o.TextEncoderSettings = new TextEncoderSettings(UnicodeRanges.All));
         services.AddMudServices();

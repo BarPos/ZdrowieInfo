@@ -577,6 +577,10 @@ namespace ZdrowieInfo.Server.Data.Migrations
                         .HasColumnType("boolean")
                         .HasColumnName("push_sent");
 
+                    b.Property<string>("Research")
+                        .HasColumnType("jsonb")
+                        .HasColumnName("research");
+
                     b.Property<NpgsqlTsVector>("SearchVector")
                         .ValueGeneratedOnAddOrUpdate()
                         .HasColumnType("tsvector")
@@ -979,6 +983,15 @@ namespace ZdrowieInfo.Server.Data.Migrations
                         .HasColumnType("text")
                         .HasColumnName("content_hash");
 
+                    b.Property<string>("ContentHtml")
+                        .HasColumnType("text")
+                        .HasColumnName("content_html");
+
+                    b.Property<string>("CreatedBy")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)")
+                        .HasColumnName("created_by");
+
                     b.Property<int>("DetailAttempts")
                         .HasColumnType("integer")
                         .HasColumnName("detail_attempts");
@@ -1014,6 +1027,11 @@ namespace ZdrowieInfo.Server.Data.Migrations
                     b.Property<DateTimeOffset>("LastChangedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("last_changed_at");
+
+                    b.Property<string>("Origin")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("origin");
 
                     b.Property<string>("PreviousTitle")
                         .HasColumnType("text")

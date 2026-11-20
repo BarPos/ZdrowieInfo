@@ -148,7 +148,7 @@ public sealed class ReportTools(
     public async Task<string> ListSources(CancellationToken ct = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(ct);
-        var sources = await db.Sources.AsNoTracking().OrderBy(s => s.Name).ToListAsync(ct);
+        var sources = await db.Sources.AsNoTracking().Where(s => s.Slug != Entries.UserEntryService.SourceSlug).OrderBy(s => s.Name).ToListAsync(ct);
         var incidents = (await db.SourceIncidents.AsNoTracking().Where(i => i.EndedAt == null).ToListAsync(ct))
             .ToLookup(i => i.SourceId);
 

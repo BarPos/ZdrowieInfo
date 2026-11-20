@@ -358,3 +358,25 @@ Domyślnie wszystkie 23 źródła sprawdzane codziennie o 5:00 (lista domyślna 
 - `update.sh` (i przywracanie w `backup.sh`) bierze adres `/healthz` z pierwszego adresu `http://` w `ASPNETCORE_URLS` – tego samego pliku, z którego startuje usługa. Nasłuch na wszystkich adresach (`0.0.0.0`, `[::]`, `*`, `+`) i `localhost` → `127.0.0.1`. `HEALTH_URL` z `update.env` zostaje tylko zapasowo; różnica trafia do logu aktualizacji.
 - Na serwerze działa `bin/update.sh` zainstalowany przez `install.sh` (nie z paczki aktualizacji), więc poprawka dociera przez `install.sh --upgrade --version X.Y.Z` albo `--repair --version X.Y.Z`; aktualizacja z panelu jej nie przynosi.
 - Testy: `update-functions-test.sh` (adresy), `container-smoke.sh` – prawdziwa aktualizacja z celowo nieaktualnym `HEALTH_URL`.
+
+## D36. Szczegóły podatności z internetu
+
+- Osobne wywołanie Claude przed analizą, tylko gdy włączone w panelu (domyślnie wyłączone) i wejście ma wpis o podatności (`CVE-…`, „podatno…”, „vulnerab…”; najwyżej 10 wpisów). Raz na raport – poprawka po walidacji używa tego samego wyniku. Dotyczy raportów dziennych, wstecz i okresowych; limit wyszukiwań na raport ogranicza koszt.
+- Bez structured outputs: wyniki web search zawsze niosą cytowania, a cytowania z `output_config.format` to błąd 400. Wynik to zwykły tekst; adresy źródeł z cytowań tekstu (`web_search_result_location`), a gdy ich brak – z bloków `web_search_tool_result`, nigdy z treści modelu.
+- `web_search_20250305` zamiast `web_search_20260209`: wariant z dynamicznym filtrowaniem szuka z wnętrza code execution, a odpowiedzi nie dało się sprawdzić na żywym API (brak klucza przy budowie) – podstawowy wariant ma opisany kształt bloków. Do zmiany po sprawdzeniu na prawdziwej odpowiedzi.
+- Profil przychodni (lista systemów) nie trafia do sprawdzania, więc nie trafia do zapytań wyszukiwarki; ocenę „czy dotyczy przychodni” robi analiza raportu.
+- Wynik idzie do analizy jako `<informacje_z_internetu>` w wiadomości użytkownika (prompt systemowy zostaje stały, cache działa); reguły 4 i 10 promptu: wolno z niego korzystać w `body`, `action` i ocenie ważności z zaznaczeniem, że to informacja z internetu; nie jest wpisem, nie do cytowania (cytat z niego jest „niezweryfikowany”).
+- Zapis: kolumna `reports.research` (jsonb) – notatki, źródła, liczba wyszukiwań, błąd. Strona i PDF: sekcja „Szczegóły podatności z internetu” z linkami (te same linki w PDF – test). `ai_usage.WebSearches`, koszt w ustawieniach $0,01 za wyszukiwanie.
+- Każdy błąd (sieć, API, odmowa, `pause_turn`, błąd wyszukiwania w odpowiedzi 200) daje raport bez tych informacji i uwagę „Sprawdzanie podatności w internecie: …” – nigdy ponowienie raportu ani raport awaryjny.
+- Limit czasu `ZdrowieInfo:Reports:ResearchTimeout` (domyślnie 3 min, czas rzeczywisty): wolne wyszukiwanie nie przesuwa porannego raportu poza okno ponowień – po limicie raport powstaje bez tych informacji, z uwagą „nie zakończyło się w ciągu 3 min”.
+- Notatki to tekst po ostatnim bloku wyniku wyszukiwania (wcześniejszy tekst to zapowiedzi „sprawdzę…”); cytowania zbierane ze wszystkich bloków tekstu. Odczyt odpowiedzi sprawdzony testami na kształcie z dokumentacji Anthropic (wyniki, cytowania, błąd w odpowiedzi 200, `pause_turn`, `max_tokens`, odmowa) – nie na żywym API.
+- Błąd przejściowy wywołania raportu (429, 5xx) ponawia cały raport co 10 minut, więc sprawdzanie też idzie od nowa (kilka wyszukiwań więcej) – świadomie, koszt mały.
+
+## D37. Wpisy własne
+
+- Panel → Wpisy własne: komunikat spoza monitorowanych stron (np. jawny komunikat CSIRT MON z poczty – niejawnych się nie wkleja) jako zwykły wpis (`source_items`) ukrytego źródła systemowego `wpisy-wlasne` (nieaktywne, `FetchMode.Manual`; tworzone przy pierwszym wpisie). Dzięki temu działa cała droga raportu: wpisy czekające, oznaczanie zaraportowanych, sprawdzanie cytatów, raporty wstecz, wyszukiwanie. Źródło nie jest sprawdzane, nie ma go w stanie źródeł, na liście źródeł ani w `list_sources`.
+- Nowe kolumny `source_items`: `origin` (źródło podane przez administratora – w raporcie „CSIRT MON (wpis własny)”), `content_html`, `created_by`. `Content` to tekst z HTML (wiersz tabeli jako „a | b | c”, punkty list z „– ”) – to czyta model i z tym porównywane są cytaty. Retencja 12 miesięcy czyści też `content_html`.
+- Każdy wpis ma własny adres `/wpisy-wlasne/{id}` (link w raporcie i PDF, strona dla każdego zalogowanego). Wspólny adres połączyłby wpisy w jedno wejście (grupowanie po URL).
+- HTML: przeglądarka odchudza wklejoną treść (komentarze, style, klasy, znaczniki Office), serwer przebudowuje ją z listy dozwolonych znaczników (akapity, nagłówki, listy, tabele z colspan/rowspan, linki http/https/mailto, pogrubienia) – nie „usuwa złych węzłów”. Strona wpisu oczyszcza HTML jeszcze raz przy wyświetleniu. Limit 300 tys. znaków HTML; limit komunikatu SignalR podniesiony do 1 MB (domyślne 32 KB nie mieści tabel z poczty).
+- Edytor: `contenteditable` pusty w drzewie Blazora, treścią zarządza `wwwroot/js/richtext.js` (pasek narzędzi na `mousedown`, żeby nie tracić zaznaczenia).
+- Edycja i usuwanie tylko przed raportem (potem cytaty wskazują na wpis).

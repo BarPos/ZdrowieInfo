@@ -1,0 +1,63 @@
+@page "/wpisy-wlasne/{Id:long}"
+@using Microsoft.EntityFrameworkCore
+@using ZdrowieInfo.Server.Data
+@using ZdrowieInfo.Server.Entries
+@using ZdrowieInfo.Server.Reports
+@using ZdrowieInfo.Web.Admin
+@inject IDbContextFactory<ZdrowieInfoDbContext> DbFactory
+
+@* Strona wpisu własnego – link z raportu i PDF; dla każdego zalogowanego, jak raporty. *@
+@if (entry is null)
+{
+    <PageTitle>Nie ma wpisu – ZdrowieInfo</PageTitle>
+    <h1>Nie ma takiego wpisu</h1>
+    <p><a href="">Wróć do listy raportów</a>.</p>
+}
+else
+{
+    <PageTitle>@entry.Title – ZdrowieInfo</PageTitle>
+    <article class="doc">
+        <header class="doc-head">
+            <p class="doc-kicker">ZdrowieInfo · wpis własny</p>
+            <h1>@entry.Title</h1>
+            <table class="doc-meta">
+                <tr><th>Źródło</th><td>@entry.Origin</td></tr>
+                <tr><th>Data</th><td>@entry.PublishedOn?.ToString("dd.MM.yyyy")</td></tr>
+                <tr><th>Dodał</th><td>@entry.CreatedBy, @Labels.Time(entry.FirstSeenAt)</td></tr>
+                <tr>
+                    <th>Raport</th>
+                    <td>
+                        @if (report is { } key) { <a href="@($"raporty/{key.Slug}")">@key.Label</a> }
+                        else { <span>czeka na raport</span> }
+                    </td>
+                </tr>
+            </table>
+        </header>
+        <section class="doc-userentry">
+            @if (string.IsNullOrEmpty(entry.ContentHtml))
+            {
+                <p class="doc-muted">Treść usunięta (wpisy starsze niż 12 miesięcy).</p>
+            }
+            else
+            {
+                @((MarkupString)RichText.Sanitize(entry.ContentHtml))
+            }
+        </section>
+    </article>
+}
+
+@code {
+    [Parameter] public long Id { get; set; }
+
+    private ZdrowieInfo.Server.Sources.SourceItem? entry;
+    private ReportKey? report;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        entry = await UserEntryService.Mine(db).AsNoTracking().SingleOrDefaultAsync(i => i.Id == Id);
+        report = entry?.ReportId is { } reportId
+            ? await db.Reports.AsNoTracking().Where(r => r.Id == reportId).Select(r => (ReportKey?)new ReportKey(r.Kind, r.PeriodStart, r.Date)).SingleOrDefaultAsync()
+            : null;
+    }
+}

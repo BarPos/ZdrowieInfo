@@ -63,7 +63,7 @@
     {
         await using var db = await DbFactory.CreateDbContextAsync();
         var counts = await db.SourceItems.GroupBy(i => i.SourceId).Select(g => new { g.Key, Count = g.Count() }).ToDictionaryAsync(x => x.Key, x => x.Count);
-        rows = (await db.Sources.AsNoTracking().OrderBy(s => s.Id).ToListAsync())
+        rows = (await db.Sources.AsNoTracking().Where(s => s.Slug != ZdrowieInfo.Server.Entries.UserEntryService.SourceSlug).OrderBy(s => s.Id).ToListAsync())
             .Select(s => new Row(s, counts.GetValueOrDefault(s.Id))).ToList();
     }
 

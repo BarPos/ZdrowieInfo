@@ -40,6 +40,7 @@ public sealed class LatexReportRenderer(IOptions<ExportOptions> options, TimePro
         model.Import("latex", new Func<string?, string>(LatexText.Escape));
         model.Import("latex_url", new Func<string?, string>(LatexText.Url));
         model.Import("latex_line", new Func<string?, string>(LatexText.EscapeLine));
+        model.Import("latex_links", new Func<string?, string>(LatexText.EscapeWithUrls));
 
         var report = view.Report;
         var pl = CultureInfo.GetCultureInfo("pl-PL");
@@ -83,7 +84,12 @@ public sealed class LatexReportRenderer(IOptions<ExportOptions> options, TimePro
         model["research"] = view.Research is { } research
             ? new ScriptObject
             {
-                ["notes"] = research.Notes,
+                ["blocks"] = ResearchNotes.Parse(research.Notes).Select(b => new ScriptObject
+                {
+                    ["kind"] = b.Kind.ToString().ToLowerInvariant(),
+                    ["text"] = b.Text,
+                    ["points"] = b.Points.Select(p => new ScriptObject { ["label"] = p.Label, ["text"] = p.Text }).ToList(),
+                }).ToList(),
                 ["searches"] = research.Searches,
                 ["sources"] = research.Sources.Select(s => new ScriptObject { ["title"] = s.Title, ["url"] = s.Url }).ToList(),
             }

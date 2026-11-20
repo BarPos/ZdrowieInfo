@@ -86,7 +86,20 @@ Wpisy źródłowe: & {{ entries_count }} \\
 {{ if research }}
 \section{Szczegóły podatności z internetu}
 {\small\color{muted}Sprawdzone automatycznie w internecie przed analizą (liczba wyszukiwań: {{ research.searches }}). Nie pochodzą z monitorowanych źródeł i nie są objęte sprawdzaniem cytatów.}\par
-{{ research.notes | latex }}
+{{ for b in research.blocks }}
+{{ if b.kind == "heading" }}
+\needspace{3\baselineskip}
+\vspace{0.4em}\textbf{ {{- b.text | latex_links -}} }\par
+{{ else if b.kind == "paragraph" }}
+{{ b.text | latex_links }}\par
+{{ else }}
+\begin{itemize}[leftmargin=1.2em,topsep=0.2em,itemsep=0.15em]
+{{ for p in b.points }}
+\item {{ if p.label }}\textbf{ {{- p.label | latex_line -}} :} {{ end }}{{ p.text | latex_links }}
+{{ end }}
+\end{itemize}
+{{ end }}
+{{ end }}
 {{ if research.sources.size > 0 }}
 \par{\small\color{muted}Źródła:}
 \begin{itemize}[leftmargin=1.2em]

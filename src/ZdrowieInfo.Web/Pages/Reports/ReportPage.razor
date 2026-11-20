@@ -90,7 +90,28 @@ else
             <section>
                 <h2><span class="doc-num">@(++section).</span> Szczegóły podatności z internetu</h2>
                 <p class="doc-muted">Sprawdzone automatycznie w internecie przed analizą (liczba wyszukiwań: @research.Searches). Nie pochodzą z monitorowanych źródeł i nie są objęte sprawdzaniem cytatów.</p>
-                <div class="doc-research">@research.Notes</div>
+                <div class="doc-research">
+                    @foreach (var block in ResearchNotes.Parse(research.Notes))
+                    {
+                        switch (block.Kind)
+                        {
+                            case ResearchBlockKind.Heading:
+                                <p class="doc-research-h">@RichLine(block.Text)</p>
+                                break;
+                            case ResearchBlockKind.Paragraph:
+                                <p>@RichLine(block.Text)</p>
+                                break;
+                            default:
+                                <ul class="doc-list">
+                                    @foreach (var point in block.Points)
+                                    {
+                                        <li>@if (point.Label is not null) { <strong>@(point.Label + ":")</strong>@(" ") }@RichLine(point.Text)</li>
+                                    }
+                                </ul>
+                                break;
+                        }
+                    }
+                </div>
                 @if (research.Sources.Count > 0)
                 {
                     <p class="doc-muted">Źródła:</p>
@@ -229,6 +250,21 @@ else
 }
 
 @code {
+    /// <summary>Tekst notatek z adresami jako linkami (notatki to zwykły tekst modelu).</summary>
+    private static RenderFragment RichLine(string text) => builder =>
+    {
+        foreach (var segment in ResearchNotes.Segments(text))
+        {
+            if (!segment.IsUrl) { builder.AddContent(0, segment.Text); continue; }
+            builder.OpenElement(1, "a");
+            builder.AddAttribute(2, "href", segment.Text);
+            builder.AddAttribute(3, "target", "_blank");
+            builder.AddAttribute(4, "rel", "noopener nofollow");
+            builder.AddContent(5, segment.Text);
+            builder.CloseElement();
+        }
+    };
+
     [Parameter] public string Day { get; set; } = "";
 
     [SupplyParameterFromQuery(Name = "link")] private string? LinkStatus { get; set; }

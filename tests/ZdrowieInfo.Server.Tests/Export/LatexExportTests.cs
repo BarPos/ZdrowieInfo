@@ -79,7 +79,7 @@ public class LatexExportTests(PostgresFixture postgres)
         hostile.Findings[0].Headline = "Nagłówek\nw dwóch liniach"; // \par w \textbf przerwałby kompilację
         hostile.Findings[0].Citations[0].Title = "Tytuł\nz nową linią";
         // Notatki z internetu też idą przez escape (treść stron i modelu), a adresy źródeł przez \href.
-        hostile.Research = new VulnerabilityResearch($"FortiOS (CVE-2026-1)\n– poprawka 7.4.3 \\input{{/etc/passwd}} & 50% #1 _x_", [new ResearchSource("Fortinet {PSIRT}", "https://www.fortiguard.com/psirt?a=1&b=%20#x")], 1);
+        hostile.Research = new VulnerabilityResearch($"Uwaga \\textbf{{x}} % ogólna.\nFortiOS (CVE-2026-1) {{x}}\n– Poprawka: 7.4.3 \\input{{/etc/passwd}} & 50% #1 _x_\n– Komunikat producenta: https://my.f5.com/manage/s/article/K000163926_bardzo_dlugi_adres_bez_spacji_ktory_musi_sie_zlamac?a=1&b=%20#x.", [new ResearchSource("Fortinet {PSIRT}", "https://www.fortiguard.com/psirt?a=1&b=%20#x")], 1);
         var result = await compiler.CompileAsync(Renderer().Render(ReportView.Build(hostile, [])));
 
         Assert.True(result.Success, result.Error);
@@ -153,7 +153,7 @@ public class LatexExportTests(PostgresFixture postgres)
                 CreatedAt = DateTimeOffset.UtcNow, UpdatedAt = DateTimeOffset.UtcNow, InputItemIds = [cited.Id, skipped.Id],
                 Body = new ReportDocument { Ignored = [new IgnoredDto { ItemId = skipped.Id.ToString(), Reason = "dotyczy aptek" }] },
                 SourcesState = [new SourceStateEntry(1, "NFZ – Komunikaty", "https://www.nfz.gov.pl/komunikaty/", true, false, "HTTP 503", null, null, true, [])],
-                Research = new VulnerabilityResearch("FortiOS\n– poprawka w 7.4.3 (100% pewne & #1)", [new ResearchSource("Fortinet PSIRT", "https://www.fortiguard.com/psirt/FG-IR-24-015?a=1&b=2")], 2),
+                Research = new VulnerabilityResearch("FortiOS\n– Poprawka: 7.4.3 (100% pewne & #1)\n– Komunikat producenta: https://my.f5.com/manage/s/article/K000163926.", [new ResearchSource("Fortinet PSIRT", "https://www.fortiguard.com/psirt/FG-IR-24-015?a=1&b=2")], 2),
                 Findings =
                 [
                     new ReportFinding
@@ -179,7 +179,8 @@ public class LatexExportTests(PostgresFixture postgres)
         var texLinks = System.Text.RegularExpressions.Regex.Matches(tex, @"\\(?:url|href)\{([^}]*)\}")
             .Select(m => m.Groups[1].Value.Replace(@"\%", "%").Replace(@"\#", "#")).Order().ToList();
 
-        Assert.Equal(6, pageLinks.Count); // przypis, pominięty wpis, źródło z uwagą, źródło sprawdzania podatności, 2 wpisy źródłowe
+        Assert.Equal(7, pageLinks.Count); // przypis, pominięty wpis, źródło z uwagą, adres w notatkach i źródło sprawdzania podatności, 2 wpisy źródłowe
+        Assert.Contains("https://my.f5.com/manage/s/article/K000163926", pageLinks); // bez kropki kończącej zdanie
         Assert.Equal(pageLinks, texLinks);
 
         // Ważność nad kategorią przy każdym punkcie (bez nagłówków grup).

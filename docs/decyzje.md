@@ -371,6 +371,7 @@ Domyślnie wszystkie 23 źródła sprawdzane codziennie o 5:00 (lista domyślna 
 - Limit czasu `ZdrowieInfo:Reports:ResearchTimeout` (domyślnie 3 min, czas rzeczywisty): wolne wyszukiwanie nie przesuwa porannego raportu poza okno ponowień – po limicie raport powstaje bez tych informacji, z uwagą „nie zakończyło się w ciągu 3 min”.
 - Notatki to tekst po ostatnim bloku wyniku wyszukiwania (wcześniejszy tekst to zapowiedzi „sprawdzę…”); cytowania zbierane ze wszystkich bloków tekstu. Odczyt odpowiedzi sprawdzony testami na kształcie z dokumentacji Anthropic (wyniki, cytowania, błąd w odpowiedzi 200, `pause_turn`, `max_tokens`, odmowa) – nie na żywym API.
 - Błąd przejściowy wywołania raportu (429, 5xx) ponawia cały raport co 10 minut, więc sprawdzanie też idzie od nowa (kilka wyszukiwań więcej) – świadomie, koszt mały.
+- Notatki to zwykły tekst w ustalonym układzie (akapit uwag, wiersz nagłówka podatności, punkty „– Etykieta: …”); `ResearchNotes` składa z niego bloki jak „Ustalenia”: pogrubiony nagłówek, lista punktów z pogrubioną etykietą, adresy jako linki (w PDF `\url`, który łamie się na marginesie). Układ pierwszych notatek z produkcji (19.11.2026) jest w teście.
 
 ## D37. Wpisy własne
 

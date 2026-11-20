@@ -34,6 +34,11 @@ public static class LatexText
         return sb.ToString();
     }
 
+    /// <summary>Tekst jednej linii z adresami jako \url – długi adres łamie się na marginesie zamiast z niego wychodzić.</summary>
+    public static string EscapeWithUrls(string? text) =>
+        string.Concat(Reports.ResearchNotes.Segments(text?.Replace("\r\n", " ").Replace('\n', ' '))
+            .Select(s => s.IsUrl ? $"\\url{{{Url(s.Text)}}}" : Escape(s.Text)));
+
     /// <summary>Tekst w jednej linii (tytuł, nagłówek, metadane PDF): nowe linie jako spacje – \par w argumencie \textbf przerwałby kompilację.</summary>
     public static string EscapeLine(string? text) =>
         Escape(text?.Replace("\r\n", " ").Replace('\n', ' ').Replace('\r', ' '));

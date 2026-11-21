@@ -1,0 +1,42 @@
+@using System.Globalization
+@using ZdrowieInfo.Server.Reports
+
+@* Koszt AI w jednej wąskiej komórce: szacunkowy udział wpisu („≈”) albo zmierzone zużycie raportu (ForReport). *@
+@if (Cost is null)
+{
+    <span class="muted" title="@(ForReport ? "Raport bez wywołania Claude (brak zmian, generator przykładowy albo raport z API)." : "Wpis nie był jeszcze analizowany przez Claude (albo raport nie ma zapisanego zużycia).")">—</span>
+}
+else
+{
+    <MudTooltip Text="@Tooltip">
+        <span class="entry-cost">
+            @(ForReport ? "" : "≈ ")@Cost.InputTokens.ToString("N0", Pl) / @Cost.OutputTokens.ToString("N0", Pl)
+            <br /><span class="muted">@(Cost.CostUsd is { } usd ? Usd(usd) : "cena nieznana")</span>
+        </span>
+    </MudTooltip>
+}
+
+@code {
+    [Parameter] public EntryCost? Cost { get; set; }
+
+    /// <summary>Zużycie całego raportu (zmierzone), a nie szacunkowy udział wpisu.</summary>
+    [Parameter] public bool ForReport { get; set; }
+
+    /// <summary>Zużycie raportu w tej samej postaci co koszt wpisu; null – bez wywołań Claude.</summary>
+    public static EntryCost? OfReport(AiUsage? usage, string? model) =>
+        usage is null || usage.InputTokens + usage.CacheReadTokens + usage.CacheWriteTokens + usage.OutputTokens == 0 ? null
+            : new EntryCost(usage.InputTokens + usage.CacheReadTokens + usage.CacheWriteTokens, usage.OutputTokens, AiPricing.Cost(usage, model), usage.Calls, usage.WebSearches);
+
+    private static readonly CultureInfo Pl = CultureInfo.GetCultureInfo("pl-PL");
+
+    public static string Usd(decimal usd) => "$" + usd.ToString(usd is > 0 and < 0.01m ? "0.000" : "0.00", Pl);
+
+    private string Tooltip => ForReport
+        ? $"Zużycie raportu (wywołania Claude: {Cost!.Reports}). Tokeny wejścia / wyjścia: {Cost.InputTokens.ToString("N0", Pl)} / {Cost.OutputTokens.ToString("N0", Pl)}" +
+          (Cost.WebSearches > 0 ? $", wyszukiwania w internecie: {Cost.WebSearches.ToString("0", Pl)}" : "") +
+          (Cost.CostUsd is null ? ". Model spoza cennika – bez ceny." : ". Cena według cennika modelu raportu.")
+        : $"Szacunek: udział wpisu w zużyciu {Cost!.Reports} {(Cost.Reports == 1 ? "raportu" : "raportów")} (proporcjonalnie do długości tekstu). " +
+        $"Tokeny wejścia / wyjścia: {Cost.InputTokens.ToString("N0", Pl)} / {Cost.OutputTokens.ToString("N0", Pl)}" +
+        (Cost.WebSearches > 0 ? $", wyszukiwania w internecie: {Cost.WebSearches.ToString("0.#", Pl)}" : "") +
+        (Cost.CostUsd is null ? ". Model spoza cennika – bez ceny." : ".");
+}

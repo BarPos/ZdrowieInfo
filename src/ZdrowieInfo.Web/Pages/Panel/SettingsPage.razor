@@ -84,7 +84,11 @@
                 <MudPaper Class="pa-4 mb-4" Elevation="1">
                     <MudText Typo="Typo.h6" Class="mb-2">Zużycie w @Clock.Today.ToString("MMMM yyyy")</MudText>
                     <MudText>@usageCalls wywołań · @usageIn.ToString("N0") tokenów wejścia · @usageOut.ToString("N0") tokenów wyjścia@(usageSearches > 0 ? $" · {usageSearches} wyszukiwań" : "")</MudText>
-                    <MudText Typo="Typo.body2">Szacunkowo ok. $@usageCost.ToString("0.00") (cennik Sonnet 5.5: $2 / $10 za mln tokenów, wyszukiwanie $10 za 1000). Kredyty z planu Max: 100–200 USD miesięcznie.</MudText>
+                    <MudText Typo="Typo.body2">
+                        Szacunkowo ok. $@usageCost.ToString("0.00") według cennika modelu z każdego raportu (np. Sonnet 5.5: $2 / $10 za mln tokenów, odczyt cache $0,10), wyszukiwanie $10 za 1000.
+                        @if (usageUnpriced > 0) { <span>Bez ceny (model spoza cennika) – liczba raportów: @usageUnpriced.</span> }
+                        Koszt pojedynczych wpisów – w Panel → Wpisy. Kredyty z planu Max: 100–200 USD miesięcznie.
+                    </MudText>
                 </MudPaper>
 
                 <MudPaper Class="pa-4" Elevation="1">
@@ -112,7 +116,7 @@
     private string? notes, newKey;
     private ReportAttempts? attempts;
     private long usageIn, usageOut;
-    private int usageCalls, usageSearches;
+    private int usageCalls, usageSearches, usageUnpriced;
     private decimal usageCost;
     private bool researchEnabled;
     private int researchMaxSearches = 5;
@@ -150,13 +154,15 @@
     {
         var month = new DateOnly(Clock.Today.Year, Clock.Today.Month, 1);
         await using var db = await DbFactory.CreateDbContextAsync();
-        var usages = await db.Reports.AsNoTracking().Where(r => r.Date >= month && r.AiUsage != null).Select(r => r.AiUsage!).ToListAsync();
+        var reports = await db.Reports.AsNoTracking().Where(r => r.Date >= month && r.AiUsage != null).Select(r => new { r.Model, Usage = r.AiUsage! }).ToListAsync();
+        var usages = reports.Select(r => r.Usage).ToList();
         usageIn = usages.Sum(u => u.InputTokens + u.CacheReadTokens + u.CacheWriteTokens);
         usageOut = usages.Sum(u => u.OutputTokens);
         usageCalls = usages.Sum(u => u.Calls);
         usageSearches = usages.Sum(u => u.WebSearches);
-        usageCost = usages.Sum(u => u.InputTokens * 2m + u.CacheWriteTokens * 2.5m + u.CacheReadTokens * 0.1m + u.OutputTokens * 10m) / 1_000_000m
-            + usageSearches * 0.01m;
+        // Ten sam cennik co koszt przy wpisach (stawki modelu z raportu); raporty z modelem spoza cennika – osobno.
+        usageCost = reports.Sum(r => AiPricing.Cost(r.Usage, r.Model) ?? 0m);
+        usageUnpriced = reports.Count(r => AiPricing.Cost(r.Usage, r.Model) is null && r.Usage.InputTokens + r.Usage.OutputTokens + r.Usage.CacheReadTokens + r.Usage.CacheWriteTokens > 0);
     }
 
     private void ToggleService(string service, bool on)

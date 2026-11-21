@@ -104,6 +104,9 @@
                 </CellTemplate>
             </TemplateColumn>
             <PropertyColumn Property="r => r.CreatedBy" Title="Dodał" />
+            <TemplateColumn Title="Koszt AI">
+                <CellTemplate><EntryCostCell Cost="context.Item.Cost" /></CellTemplate>
+            </TemplateColumn>
             <TemplateColumn>
                 <CellTemplate>
                     <MudStack Row="true" Spacing="0" Justify="Justify.FlexEnd" Style="white-space:nowrap">
@@ -133,7 +136,8 @@
 </AdminShell>
 
 @code {
-    private sealed record Row(long Id, DateOnly? PublishedOn, string Origin, string Title, DateTimeOffset? ReportedAt, string? CreatedBy, string? ReportSlug, string? ReportLabel);
+    private sealed record Row(long Id, DateOnly? PublishedOn, string Origin, string Title, DateTimeOffset? ReportedAt, string? CreatedBy, string? ReportSlug, string? ReportLabel,
+        ZdrowieInfo.Server.Reports.EntryCost? Cost);
 
     private enum StateFilter { All, Pending, Reported }
 
@@ -196,13 +200,14 @@
         var keys = (await db.Reports.AsNoTracking().Where(r => reportIds.Contains(r.Id))
                 .Select(r => new { r.Id, r.Kind, r.PeriodStart, r.Date }).ToListAsync(ct))
             .ToDictionary(r => r.Id, r => new ZdrowieInfo.Server.Reports.ReportKey(r.Kind, r.PeriodStart, r.Date));
+        var costs = await ZdrowieInfo.Server.Reports.EntryCosts.EstimateAsync(db, items.Select(i => i.Id).ToList(), ct);
         return new GridData<Row>
         {
             TotalItems = total,
             Items = items.Select(i =>
             {
                 var key = i.ReportId is { } id && keys.TryGetValue(id, out var k) ? k : (ZdrowieInfo.Server.Reports.ReportKey?)null;
-                return new Row(i.Id, i.PublishedOn, i.Origin ?? "", i.Title, i.ReportedAt, i.CreatedBy, key?.Slug, key?.Label);
+                return new Row(i.Id, i.PublishedOn, i.Origin ?? "", i.Title, i.ReportedAt, i.CreatedBy, key?.Slug, key?.Label, costs.GetValueOrDefault(i.Id));
             }).ToList(),
         };
     }

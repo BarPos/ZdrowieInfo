@@ -48,6 +48,7 @@ kbd { background: var(--surface); border: 1px solid var(--border); border-radius
 .linklike { background: none; border: 0; color: inherit; font: inherit; padding: 0; cursor: pointer; }
 
 .content { max-width: 960px; margin: 0 auto; padding: 1.25rem 1rem 3rem; }
+.entry-cost { white-space: nowrap; font-variant-numeric: tabular-nums; font-size: .85rem; }
 .doc-research p { margin: .5rem 0; }
 .doc-research .doc-research-h { font-weight: 700; margin: 1rem 0 .3rem; }
 .doc-research .doc-list { margin-top: .2rem; }

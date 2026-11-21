@@ -45,6 +45,9 @@
                     }
                 </CellTemplate>
             </TemplateColumn>
+            <TemplateColumn Title="Koszt AI">
+                <CellTemplate><EntryCostCell Cost="context.Item.Cost" /></CellTemplate>
+            </TemplateColumn>
         </Columns>
         <PagerContent>
             <MudDataGridPager T="Row" PageSizeOptions="[25, 50, 100]" RowsPerPageString="Wierszy na stronę:" />
@@ -53,7 +56,7 @@
 </AdminShell>
 
 @code {
-    private sealed record Row(SourceItem Item, string Source);
+    private sealed record Row(SourceItem Item, string Source, ZdrowieInfo.Server.Reports.EntryCost? Cost);
     private sealed record SourceOption(int Id, string Name);
 
     private MudDataGrid<Row>? grid;
@@ -78,7 +81,8 @@
         var total = await query.CountAsync(ct);
         var page = await query.OrderByDescending(x => x.i.LastChangedAt).ThenByDescending(x => x.i.Id)
             .Skip(state.Page * state.PageSize).Take(state.PageSize).ToListAsync(ct);
-        return new GridData<Row> { TotalItems = total, Items = page.Select(x => new Row(x.i, x.Name)).ToList() };
+        var costs = await ZdrowieInfo.Server.Reports.EntryCosts.EstimateAsync(db, page.Select(x => x.i.Id).ToList(), ct);
+        return new GridData<Row> { TotalItems = total, Items = page.Select(x => new Row(x.i, x.Name, costs.GetValueOrDefault(x.i.Id))).ToList() };
     }
 
     private Task LoadAsync() => grid?.ReloadServerData() ?? Task.CompletedTask;

@@ -92,6 +92,9 @@
             <PropertyColumn Property="r => StatusText(r)" Title="Stan" />
             <PropertyColumn Property="r => r.Findings" Title="Punkty" />
             <PropertyColumn Property="r => r.Producer" Title="Przygotował" />
+            <TemplateColumn Title="Koszt AI">
+                <CellTemplate><EntryCostCell Cost="context.Item.Cost" ForReport="true" /></CellTemplate>
+            </TemplateColumn>
             <TemplateColumn Title="Link">
                 <CellTemplate>@(context.Item.Shared ? "udostępniony" : "")</CellTemplate>
             </TemplateColumn>
@@ -127,7 +130,7 @@
 </AdminShell>
 
 @code {
-    private sealed record Row(ReportKey Key, string Title, ReportStatus Status, bool IsEmpty, int Findings, string Producer, bool Shared);
+    private sealed record Row(ReportKey Key, string Title, ReportStatus Status, bool IsEmpty, int Findings, string Producer, bool Shared, EntryCost? Cost);
 
     private MudDataGrid<Row>? grid;
     private DateTime? day, from, to;
@@ -162,12 +165,13 @@
         var page = await db.Reports.AsNoTracking()
             .OrderByDescending(r => r.Date).ThenBy(r => r.Kind).ThenByDescending(r => r.PeriodStart)
             .Skip(state.Page * state.PageSize).Take(state.PageSize)
-            .Select(r => new { r.Kind, r.PeriodStart, r.Date, r.Title, r.Status, r.IsEmpty, Findings = r.Findings.Count, r.Producer, Shared = r.ShareToken != null })
+            .Select(r => new { r.Kind, r.PeriodStart, r.Date, r.Title, r.Status, r.IsEmpty, Findings = r.Findings.Count, r.Producer, Shared = r.ShareToken != null, r.Model, r.AiUsage })
             .ToListAsync(ct);
         return new GridData<Row>
         {
             TotalItems = total,
-            Items = page.Select(r => new Row(new ReportKey(r.Kind, r.PeriodStart, r.Date), r.Title, r.Status, r.IsEmpty, r.Findings, r.Producer, r.Shared)).ToList(),
+            Items = page.Select(r => new Row(new ReportKey(r.Kind, r.PeriodStart, r.Date), r.Title, r.Status, r.IsEmpty, r.Findings, r.Producer, r.Shared,
+                EntryCostCell.OfReport(r.AiUsage, r.Model))).ToList(),
         };
     }
 

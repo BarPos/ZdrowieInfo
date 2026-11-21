@@ -494,7 +494,9 @@ public sealed class DailyReportService(
         try
         {
             var result = await researcher.ResearchAsync(candidates, options, timeout.Token);
-            return result is null ? (null, null) : (result.Research, result.Usage);
+            if (result is null) return (null, null);
+            var researched = result.Research with { Usage = result.Usage, ItemIds = candidates.SelectMany(c => c.SourceItemIds).Distinct().ToList() };
+            return (researched, result.Usage);
         }
         catch (OperationCanceledException) when (timeout.IsCancellationRequested && !ct.IsCancellationRequested)
         {

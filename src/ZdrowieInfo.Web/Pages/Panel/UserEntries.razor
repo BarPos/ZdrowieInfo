@@ -5,6 +5,7 @@
 @using ZdrowieInfo.Server.Common
 @using ZdrowieInfo.Server.Data
 @using ZdrowieInfo.Server.Entries
+@using Microsoft.AspNetCore.Components.Forms
 @inject IDbContextFactory<ZdrowieInfoDbContext> DbFactory
 @inject UserEntryService Entries
 @inject WarsawClock Clock
@@ -61,6 +62,59 @@
                 <MudButton Variant="Variant.Text" Disabled="saving" OnClick="CancelEdit">Anuluj edycję</MudButton>
             }
         </MudStack>
+    </MudPaper>
+
+    <MudPaper Class="pa-4 mb-4" Elevation="1">
+        <MudText Typo="Typo.h6" Class="mb-1">Import maili (.eml)</MudText>
+        <MudText Typo="Typo.body2" Class="mb-2">
+            Zapisz maile z komunikatami jako pliki .eml (np. w Thunderbirdzie: Plik → Zapisz jako) i wybierz pliki albo cały folder.
+            Z maila zostaje sam komunikat – bez nagłówków przekazania, adresów, podpisu, stopki i obrazów. Przed dodaniem zobaczysz listę;
+            maile już zaimportowane są pomijane.
+        </MudText>
+        <InputFile id="eml-files" OnChange="FilesChosen" multiple accept=".eml,message/rfc822" class="d-none" />
+        <InputFile id="eml-folder" OnChange="FilesChosen" multiple webkitdirectory class="d-none" />
+        <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center" Wrap="Wrap.Wrap">
+            <MudButton HtmlTag="label" for="eml-files" Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.UploadFile">Wybierz pliki</MudButton>
+            <MudButton HtmlTag="label" for="eml-folder" Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.DriveFolderUpload">Wybierz folder</MudButton>
+            @if (parsing) { <MudProgressCircular Size="Size.Small" Indeterminate="true" /> <span>Odczytywanie maili…</span> }
+        </MudStack>
+        @if (importNote is not null)
+        {
+            <MudAlert Severity="Severity.Info" Dense="true" Class="mt-2">@importNote</MudAlert>
+        }
+        @if (preview.Count > 0)
+        {
+            <MudSimpleTable Dense="true" Class="mt-2">
+                <thead><tr><th></th><th>Tytuł</th><th>Data</th><th>Źródło</th><th>Stan</th></tr></thead>
+                <tbody>
+                    @foreach (var row in preview)
+                    {
+                        <tr>
+                            <td>
+                                @if (row.Result.Entry is not null && !row.Duplicate && !row.Done)
+                                {
+                                    <MudCheckBox T="bool" @bind-Value="row.Selected" Dense="true" Size="Size.Small" aria-label="Importuj" />
+                                }
+                            </td>
+                            <td>@(row.Result.Entry?.Title ?? row.Result.FileName)</td>
+                            <td>@Labels.Date(row.Result.Entry?.PublishedOn)</td>
+                            <td>@row.Result.Entry?.Origin</td>
+                            <td>
+                                @if (row.Done) { <MudChip T="string" Size="Size.Small" Color="Color.Success">dodany</MudChip> }
+                                else if (row.Result.Error is { } error) { <span class="mud-error-text">@error</span> }
+                                else if (row.DuplicateReason is { } reason) { <span class="muted">@reason</span> }
+                                else if (row.Status is { } status) { <span class="mud-error-text">@status</span> }
+                                else { <span>nowy</span> }
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </MudSimpleTable>
+            <MudStack Row="true" Spacing="2" Class="mt-2">
+                <MudButton Variant="Variant.Filled" Color="Color.Primary" Disabled="importing || SelectedCount == 0" OnClick="ImportSelected">Dodaj zaznaczone (@SelectedCount)</MudButton>
+                <MudButton Variant="Variant.Text" Disabled="importing" OnClick="ClearImport">Wyczyść</MudButton>
+            </MudStack>
+        }
     </MudPaper>
 
     <MudStack Row="true" Spacing="3" AlignItems="AlignItems.Center" Wrap="Wrap.Wrap" Class="mb-2">
@@ -140,6 +194,121 @@
         ZdrowieInfo.Server.Reports.EntryCost? Cost);
 
     private enum StateFilter { All, Pending, Reported }
+
+    /// <param name="duplicate">Dlaczego pominięty: już zaimportowany albo ten sam mail drugi raz w wybranych plikach.</param>
+    private sealed class PreviewRow(MailParseResult result, string? duplicate)
+    {
+        public MailParseResult Result { get; } = result;
+        public string? DuplicateReason { get; } = duplicate;
+        public bool Duplicate => DuplicateReason is not null;
+        public bool Selected { get; set; } = result.Entry is not null && duplicate is null;
+        public bool Done { get; set; }
+        public string? Status { get; set; }
+    }
+
+    private const string Imported = "już zaimportowany – pominięty";
+    private const string Repeated = "ten sam mail jest wyżej na liście – pominięty";
+
+    /// <summary>Najwięcej plików w jednym wyborze (folder może mieć ich dużo – inne niż .eml są pomijane).</summary>
+    private const int MaxImportFiles = 1000;
+
+    private List<PreviewRow> preview = [];
+    private string? importNote;
+    private bool parsing, importing;
+
+    private int SelectedCount => preview.Count(p => p.Selected && p.Result.Entry is not null && !p.Duplicate && !p.Done);
+
+    private async Task FilesChosen(InputFileChangeEventArgs e)
+    {
+        parsing = true;
+        importNote = null;
+        preview = [];
+        try
+        {
+            IReadOnlyList<IBrowserFile> files;
+            try
+            {
+                files = e.GetMultipleFiles(MaxImportFiles);
+            }
+            catch (InvalidOperationException)
+            {
+                importNote = $"Za dużo plików naraz (najwyżej {MaxImportFiles}). Wybierz mniejszy folder albo część plików.";
+                return;
+            }
+            var mails = files.Where(f => f.Name.EndsWith(".eml", StringComparison.OrdinalIgnoreCase)).ToList();
+            var others = files.Count - mails.Count;
+            // Odczyt od razu i po kolei – odwołania do plików z przeglądarki tracą ważność po kolejnym renderowaniu.
+            var results = new List<MailParseResult>();
+            foreach (var file in mails)
+            {
+                if (file.Size > MailImport.MaxFileBytes)
+                {
+                    results.Add(new MailParseResult(file.Name, null, "Plik jest za duży (najwyżej 10 MB)."));
+                    continue;
+                }
+                try
+                {
+                    await using var stream = file.OpenReadStream(MailImport.MaxFileBytes);
+                    using var buffer = new MemoryStream();
+                    await stream.CopyToAsync(buffer);
+                    results.Add(MailImport.Parse(buffer.ToArray(), file.Name));
+                }
+                catch (IOException ex)
+                {
+                    results.Add(new MailParseResult(file.Name, null, $"Nie udało się odczytać pliku: {ex.Message}"));
+                }
+            }
+
+            var existing = await Entries.ExistingKeysAsync(results.Where(r => r.Entry is not null).Select(r => r.Entry!.Key).ToList());
+            var seen = new HashSet<string>();
+            preview = results
+                .OrderBy(r => r.Entry?.PublishedOn ?? DateOnly.MaxValue).ThenBy(r => r.FileName, StringComparer.CurrentCulture)
+                .Select(r => new PreviewRow(r, r.Entry is not { } entry ? null
+                    : existing.Contains(entry.Key) ? Imported
+                    : !seen.Add(entry.Key) ? Repeated : null))
+                .ToList();
+            var parts = new List<string> { mails.Count == 0 ? "W wybranych plikach nie ma maili .eml." : $"Maile .eml: {mails.Count}" };
+            if (preview.Count(p => p.DuplicateReason == Imported) is > 0 and var imported) parts.Add($"już zaimportowane: {imported}");
+            if (preview.Count(p => p.DuplicateReason == Repeated) is > 0 and var repeated) parts.Add($"powtórzone w wybranych plikach: {repeated}");
+            if (preview.Count(p => p.Result.Error is not null) is > 0 and var errors) parts.Add($"nieodczytane: {errors}");
+            if (others > 0) parts.Add($"pominięte pliki innego typu: {others}");
+            importNote = string.Join(", ", parts) + ".";
+        }
+        finally
+        {
+            parsing = false;
+        }
+    }
+
+    private async Task ImportSelected()
+    {
+        importing = true;
+        int added = 0, failed = 0;
+        try
+        {
+            foreach (var row in preview.Where(p => p.Selected && p.Result.Entry is not null && !p.Duplicate && !p.Done).ToList())
+            {
+                var entry = row.Result.Entry!;
+                var origin = entry.Origin.Length > 0 ? entry.Origin : "Poczta";
+                var result = await Entries.CreateAsync(new UserEntryInput(origin, entry.Title, entry.Html, entry.PublishedOn), login, key: entry.Key);
+                row.Selected = false;
+                if (result.Ok) { row.Done = true; added++; }
+                else { row.Status = result.Error; failed++; }
+            }
+        }
+        finally
+        {
+            importing = false;
+        }
+        Snackbar.Add(failed == 0 ? $"Dodano wpisów: {added}." : $"Dodano wpisów: {added}, nieudane: {failed}.", failed == 0 ? Severity.Success : Severity.Warning);
+        await LoadAsync();
+    }
+
+    private void ClearImport()
+    {
+        preview = [];
+        importNote = null;
+    }
 
     private ElementReference editor, toolbar;
     private IJSObjectReference? module;

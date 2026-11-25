@@ -28,17 +28,20 @@ public sealed class UserEntryService(IDbContextFactory<ZdrowieInfoDbContext> dbF
 
     public string PageUrl(long id) => $"{app.Value.PublicUrl.TrimEnd('/')}/wpisy-wlasne/{id}";
 
-    public async Task<UserEntryResult> CreateAsync(UserEntryInput input, string createdBy, CancellationToken ct = default)
+    /// <param name="key">Klucz z identyfikatora maila (import): wpis o tym kluczu już istnieje – nic nie jest dodawane.</param>
+    public async Task<UserEntryResult> CreateAsync(UserEntryInput input, string createdBy, CancellationToken ct = default, string? key = null)
     {
         if (Validate(input, out var html, out var text) is { } error) return new UserEntryResult(false, Error: error);
         await using var db = await dbFactory.CreateDbContextAsync(ct);
         var sourceId = await EnsureSourceAsync(db, ct);
+        if (key is not null && await db.SourceItems.AnyAsync(i => i.SourceId == sourceId && i.Key == key, ct))
+            return new UserEntryResult(false, Error: "Ten mail jest już zaimportowany.");
         var now = time.GetUtcNow();
         var item = new SourceItem
         {
             SourceId = sourceId,
             Kind = SourceItemKind.Entry,
-            Key = $"wpis-wlasny:{Guid.NewGuid():N}",
+            Key = key ?? $"wpis-wlasny:{Guid.NewGuid():N}",
             Url = "", // adres z identyfikatorem – po zapisie
             Title = input.Title.Trim(),
             PublishedOn = input.PublishedOn,
@@ -104,6 +107,15 @@ public sealed class UserEntryService(IDbContextFactory<ZdrowieInfoDbContext> dbF
         item.LastChangedAt = time.GetUtcNow();
         await db.SaveChangesAsync(ct);
         return new UserEntryResult(true, id);
+    }
+
+    /// <summary>Które z kluczy (maili) są już zaimportowane – do podglądu importu.</summary>
+    public async Task<HashSet<string>> ExistingKeysAsync(IReadOnlyCollection<string> keys, CancellationToken ct = default)
+    {
+        if (keys.Count == 0) return [];
+        await using var db = await dbFactory.CreateDbContextAsync(ct);
+        var list = keys.ToList();
+        return (await Mine(db).Where(i => list.Contains(i.Key)).Select(i => i.Key).ToListAsync(ct)).ToHashSet();
     }
 
     /// <summary>Wpisy własne (do listy w panelu i strony wpisu).</summary>

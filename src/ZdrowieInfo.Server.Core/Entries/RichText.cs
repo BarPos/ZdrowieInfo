@@ -1,4 +1,5 @@
 using System.Text;
+using System.Text.RegularExpressions;
 using AngleSharp.Dom;
 using AngleSharp.Html.Parser;
 using ZdrowieInfo.Server.Sources.Extraction;
@@ -9,7 +10,7 @@ namespace ZdrowieInfo.Server.Entries;
 /// Treść wpisu własnego (wklejona z poczty albo strony): HTML przebudowany z listy dozwolonych znaczników – nigdy
 /// nie przepisywany „z usunięciem złych węzłów” – oraz tekst dla modelu i sprawdzania cytatów (wiersze tabel jako „a | b | c”).
 /// </summary>
-public static class RichText
+public static partial class RichText
 {
     /// <summary>Najdłuższy przyjmowany HTML (po oczyszczeniu w przeglądarce).</summary>
     public const int MaxHtmlChars = 300_000;
@@ -40,26 +41,42 @@ public static class RichText
         if (string.IsNullOrWhiteSpace(html)) return "";
         var document = Parser.ParseDocument($"<body>{html}</body>");
         var sb = new StringBuilder();
-        foreach (var child in document.Body!.ChildNodes) Write(child, sb);
-        return sb.ToString().Trim();
+        foreach (var child in document.Body!.ChildNodes) Write(child, sb, inPre: false);
+        // Odstępy (<br>) na początku i końcu – np. po usuniętym nagłówku przekazanego maila.
+        return EdgeBreaks().Replace(sb.ToString(), "").Trim();
     }
 
-    private static void Write(INode node, StringBuilder sb)
+    [GeneratedRegex(@"^(\s|<br>)+|(\s|<br>)+$")]
+    private static partial Regex EdgeBreaks();
+
+    [GeneratedRegex(@"\s+")]
+    private static partial Regex Whitespace();
+
+    private static void Write(INode node, StringBuilder sb, bool inPre)
     {
         switch (node)
         {
             case IText text:
-                sb.Append(Encode(text.Data));
+                // Jak w HTML: łamania linii i wcięcia źródła to jedna spacja (poza <pre>).
+                sb.Append(Encode(inPre ? text.Data : Whitespace().Replace(text.Data, " ")));
                 return;
             case IElement element:
                 var name = element.LocalName.ToLowerInvariant();
                 if (Dropped.Contains(name)) return;
+                // Puste elementy (np. resztki podpisu, <b> </b>) – pomijane; komórki tabeli zostają dla układu.
+                if (name is not ("br" or "hr" or "td" or "th") && string.IsNullOrWhiteSpace(element.TextContent) && element.QuerySelector("br, hr") is null)
+                {
+                    // Pusty element wstawiany (<span> </span>) bywa jedyną spacją między słowami – zostaje spacja.
+                    if (element.TextContent.Length > 0 && !Blocks.Contains(name) && name is not ("table" or "tr")) sb.Append(' ');
+                    return;
+                }
                 if (!Allowed.Contains(name))
                 {
-                    // div, span, font… – sam tekst, a bloki jako akapity.
-                    var block = name is "div" or "section" or "article" or "center";
+                    // div, span, font… – sam tekst; blok z samym tekstem jako akapit (bez zagnieżdżania akapitów w akapitach).
+                    var block = name is "div" or "section" or "article" or "center"
+                                && !element.Children.Any(c => Blocks.Contains(c.LocalName) || c.LocalName is "table" or "div" or "section");
                     if (block) sb.Append("<p>");
-                    foreach (var child in element.ChildNodes) Write(child, sb);
+                    foreach (var child in element.ChildNodes) Write(child, sb, inPre);
                     if (block) sb.Append("</p>");
                     return;
                 }
@@ -72,7 +89,7 @@ public static class RichText
                             sb.Append(' ').Append(attribute).Append("=\"").Append(span).Append('"');
                 if (name is "br" or "hr") { sb.Append('>'); return; }
                 sb.Append('>');
-                foreach (var child in element.ChildNodes) Write(child, sb);
+                foreach (var child in element.ChildNodes) Write(child, sb, inPre || name == "pre");
                 sb.Append("</").Append(name).Append('>');
                 return;
         }
@@ -100,7 +117,7 @@ public static class RichText
         switch (node)
         {
             case IText text:
-                sb.Append(text.Data);
+                sb.Append(Whitespace().Replace(text.Data, " "));
                 return;
             case IElement element:
                 var name = element.LocalName.ToLowerInvariant();
